@@ -106,6 +106,62 @@ class Node:
         return r
 
 
+class Address:
+    @staticmethod
+    def transactions(address):
+        cursor = DbCursor
+        qry = cursor.execute_and_fetchall("""
+        SELECT transactions."id", transactions."amount",
+               transactions."timestamp", transactions."recipientId",
+               transactions."senderId", transactions."rawasset",
+               transactions."type", transactions."fee"
+        FROM transactions
+        WHERE transactions."senderId" = '{0}'
+        AND transactions."recipientId" = '{0}'""".format(address))
+
+        Transaction = namedtuple(
+            'transaction',
+            'id amount timestamp recipientId senderId rawasset type fee')
+        named_transactions = []
+
+        for i in qry:
+            tx_id = Transaction(
+                id=i[0],
+                amount=i[1],
+                timestamp=i[2],
+                recipientId=i[3],
+                senderId=i[4],
+                rawasset=i[5],
+                type=i[6],
+                fee=i[7],
+                )
+
+            named_transactions.append(tx_id)
+
+        return named_transactions
+
+    @staticmethod
+    def votes(address):
+        if type(address) == list and len(address) > 1:
+            addresses = 'IN {}'.format(tuple(address))
+
+        else:
+            addresses = '= ' + address
+        cursor = DbCursor()
+        qry = cursor.execute_and_fetchall("""
+           SELECT votes."votes", transaction."timestamp"
+           FROM votes, transactions
+           WHERE transactions."id" = votes."transactionId"
+           AND transactions."recipientId" '{}'
+        """.format(addresses))
+        res = {}
+        for i in qry:
+            res.update({i[0]: i[1]})
+        return res
+
+
+
+
 class Delegate:
     @staticmethod
     def voters(delegate_pubkey):
@@ -117,11 +173,23 @@ class Delegate:
                  WHERE transactions."id" = votes."transactionId"
                  AND votes."votes" = '+{}';
         """.format(delegate_pubkey))
-        return qry
+
+        Voter = namedtuple(
+            'voter',
+            'address timestamp')
+        voters = []
+        for i in qry:
+            voter = Voter(
+                address=i[0],
+                timestamp=i[1]
+                          )
+            voters.append(voter)
+        return voters
 
     @staticmethod
     def blocks():
         pass
+
 
     @staticmethod
     def share(passphrase=None, last_payout=None):

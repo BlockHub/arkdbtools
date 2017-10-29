@@ -6,3 +6,6 @@ at.set_connection(host="localhost",
                   user="test",
                   password='test')
 
+address = ['a', 'b', 'c']
+addresses = 'IN {}'.format(tuple(address))
+print(addresses)
