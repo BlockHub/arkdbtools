@@ -1,6 +1,6 @@
 
 import arkdbtools as ark
-
+from arky import api
 ark.set_connection(
     host="localhost",
     database="ark_mainnet",
@@ -57,7 +57,7 @@ ark.set_delegate(address='AZse3vk8s3QEX1bqijFb21aSBeoF6vqLYE',
 #
 res = ark.Delegate.share(start_block=0,)
 for i in res[0]:
-    print(i, res[0][i]['balance']/ark.ARK, res[0][i]['status'], res[0][i]['share'], (res[0][i]['share']/(res[0][i]['balance']/ark.ARK + 0.0000000000000001))*52*100)
+    print(i, res[0][i]['share'], res[0][i]['status'])
 sums = 0
 for x in res[0]:
     sums += res[0][x]['share']

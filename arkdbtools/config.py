@@ -13,5 +13,8 @@ DELEGATE = {
 
 ARK = 100000000
 
-BLACKLIST = []
-ULTRABLACKLIST = ['AXzEMF7TC1aH3ax1Luxk6XdyKXDRxnBj4f']
+CALCULATION_BLACKLIST = ['AXzEMF7TC1aH3ax1Luxk6XdyKXDRxnBj4f']
+CALCULATION_EXCEPTION = {'address': {'replace': 'int else None'},
+                         'max': float('inf')}
+
+

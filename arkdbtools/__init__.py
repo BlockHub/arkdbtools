@@ -367,7 +367,7 @@ class Delegate:
                                                'share': 0.0,
                                                'vote_timestamp': voter.timestamp}})
         try:
-            for i in config.ULTRABLACKLIST:
+            for i in config.CALCULATION_BLACKLIST:
                 voter_dict.pop(i, None)
         except Exception:
             pass
@@ -397,6 +397,11 @@ class Delegate:
                 poolbalance = 0
                 chunk_dict = {}
                 for i in voter_dict:
+                    if voter_dict[i]['balance'] > config.CALCULATION_EXCEPTION['max']:
+                        voter_dict[i]['balance'] = config.CALCULATION_EXCEPTION['max']
+                    if i in config.CALCULATION_EXCEPTION:
+                        voter_dict[i]['balance'] = config.CALCULATION_BLACKLIST[i]['replace']
+
                     if voter_dict[i]['balance'] < 0:
                         raise Exception('Negative balance for {}'.format(i))
                     if voter_dict[i]['status']:
@@ -406,10 +411,6 @@ class Delegate:
                         share = (voter_dict[i]['balance']/poolbalance) * 2
                         voter_dict[i]['share'] += share
                         chunk_dict.update({i: share})
-
-                suma = 0
-                for t in voter_dict:
-                    suma += voter_dict[t]['share']
                 reuse = True
 
 
@@ -418,6 +419,7 @@ class Delegate:
             plusvote = '{{"votes":["+{0}"]}}'.format(delegate_pubkey)
 
             reuse = False
+
             if tx.recipientId in voter_dict:
                 voter_dict[tx.recipientId]['balance'] += tx.amount
             if tx.senderId in voter_dict:

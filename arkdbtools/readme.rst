@@ -11,7 +11,7 @@ First create a new psql user:
      $sudo -u postgres createuser <username>
 
 You can add a password for security reasons, this is not necessary if you run your programs using a local
-node, but a must if you ar querying over the internet.
+node, but a must if you are querying over the internet.
 
      $sudo -u postgres psql
       psql=# ALTER USER <username> WITH ENCRYPTED PASSWORD '<password>';
