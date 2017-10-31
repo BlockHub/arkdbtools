@@ -3,7 +3,8 @@ import psycopg2
 from arky import api, core
 from .utils import *
 from .share_calculator import *
-
+import binascii
+import datetime
 
 class ApiError(Exception):
     pass
@@ -171,18 +172,53 @@ class Address:
     @staticmethod
     def balance(address):
         """Takes a single address and returns the current balance.
-        Returns an incorrect value if a delegate is queried."""
+        """
         txhistory = Address.transactions(address)
         balance = 0
         for i in txhistory:
             if i.recipientId == address:
                 balance += i.amount
-            elif i.senderId == address:
+            if i.senderId == address:
                 balance -= (i.amount + i.fee)
+
+        delegates = Delegate.delegates()
+        for i in delegates:
+            if address == i.address:
+                forged_blocks = Delegate.blocks(i.pubkey)
+                for block in forged_blocks:
+                    balance += (block.reward + block.totalFee)
         return balance
 
 
 class Delegate:
+    @staticmethod
+    def delegates():
+        """returns a list of named tuples of all delegates.
+        {username: {'pubkey':pubkey, 'timestamp':timestamp, 'address':address}}"""
+        cursor = DbCursor()
+        qry = cursor.execute_and_fetchall("""
+            SELECT delegates."username", delegates."transactionId", transactions."timestamp", transactions."senderId", 
+            transactions."senderPublicKey" 
+            FROM transactions
+            JOIN delegates ON transactions."id" = delegates."transactionId"
+        """)
+
+        Delegate = namedtuple(
+            'delegate',
+            'username pubkey timestamp address transactionId')
+        res = []
+        for i in qry:
+            registration = Delegate(
+                username=i[0],
+                pubkey=binascii.hexlify(i[4]).decode("utf-8"),
+                timestamp=i[2],
+                address=i[3],
+                transactionId=i[1]
+            )
+            res.append(registration)
+        return res
+
+
     @staticmethod
     def lastpayout(delegate_address, blacklist=[]):
         '''
@@ -285,7 +321,6 @@ class Delegate:
                     del votes[count]
         return votes
 
-
     @staticmethod
     def blocks(delegate_pubkey=None, max_timestamp=None):
         """returns a list of named tuples of all blocks forged by a delegate.
@@ -301,7 +336,7 @@ class Delegate:
         cursor = DbCursor()
 
         qry = cursor.execute_and_fetchall("""
-             SELECT blocks."timestamp", blocks."height", blocks."id"
+             SELECT blocks."timestamp", blocks."height", blocks."id", blocks."totalFee", blocks."reward"
              FROM blocks
              WHERE {0} blocks."generatorPublicKey" = '\\x{1}'
              ORDER BY blocks."timestamp" 
@@ -310,12 +345,14 @@ class Delegate:
             delegate_pubkey))
 
         Block = namedtuple('block',
-                           'timestamp height id')
+                           'timestamp height id totalFee reward')
         block_list = []
         for block in qry:
             block_value = Block(timestamp=block[0],
                                 height=block[1],
-                                id=block[2], )
+                                id=block[2],
+                                totalFee=block[3],
+                                reward=block[4])
             block_list.append(block_value)
 
         return block_list
@@ -365,10 +402,18 @@ class Delegate:
                                                'status': False,
                                                'last_payout': voter.timestamp,
                                                'share': 0.0,
-                                               'vote_timestamp': voter.timestamp}})
+                                               'vote_timestamp': voter.timestamp,
+                                               'blocks_forged': []}})
+
+        # check if a voter is/used to be a forging delegate
+        delegates = Delegate.delegates()
+        for i in delegates:
+            if i.address in voter_dict:
+                voter_dict[i.address]['blocks_forged'].extend(Delegate.blocks(i.pubkey))
+
         try:
-            for i in config.CALCULATION_BLACKLIST:
-                voter_dict.pop(i, None)
+            for i in config.CALCULATION_SETTINGS['blacklist']:
+                voter_dict.pop(i)
         except Exception:
             pass
 
@@ -397,18 +442,36 @@ class Delegate:
                 poolbalance = 0
                 chunk_dict = {}
                 for i in voter_dict:
-                    if voter_dict[i]['balance'] > config.CALCULATION_EXCEPTION['max']:
-                        voter_dict[i]['balance'] = config.CALCULATION_EXCEPTION['max']
-                    if i in config.CALCULATION_EXCEPTION:
-                        voter_dict[i]['balance'] = config.CALCULATION_BLACKLIST[i]['replace']
+                    balance = voter_dict[i]['balance']
+                    if voter_dict[i]['balance'] > config.CALCULATION_SETTINGS['max']:
+                        balance = config.CALCULATION_SETTINGS['max']
+                    if i in config.CALCULATION_SETTINGS['exceptions']:
+                        balance = config.CALCULATION_SETTINGS['exceptions'][i]
 
-                    if voter_dict[i]['balance'] < 0:
-                        raise Exception('Negative balance for {}'.format(i))
+                    if voter_dict[i]['blocks_forged']:
+                        for x in voter_dict[i]['blocks_forged']:
+                            if x.timestamp < blocks[block_nr].timestamp:
+                                voter_dict[i]['balance'] += (x.reward + x.totalFee)
+                                voter_dict[i]['blocks_forged'].remove(x)
                     if voter_dict[i]['status']:
-                        poolbalance += voter_dict[i]['balance']
+                        if not voter_dict[i]['balance'] < 0:
+                            poolbalance += balance
+                        else:
+                            raise Exception('balance lower than zero for: {0}'.format(i))
                 for i in voter_dict:
+                    balance = voter_dict[i]['balance']
+
+                    if voter_dict[i]['balance'] > config.CALCULATION_SETTINGS['max']:
+                        balance = config.CALCULATION_SETTINGS['max']
+                    if i in config.CALCULATION_SETTINGS['exceptions']:
+                        balance = config.CALCULATION_SETTINGS['exceptions'][i]
+
                     if voter_dict[i]['status'] and voter_dict[i]['last_payout'] < blocks[block_nr].timestamp:
-                        share = (voter_dict[i]['balance']/poolbalance) * 2
+                        if config.CALCULATION_SETTINGS['share_fees']:
+                            share = (balance/poolbalance) * (blocks[block_nr].reward +
+                                                             blocks[block_nr].totalFee)
+                        else:
+                            share = (balance/poolbalance) * blocks[block_nr].reward
                         voter_dict[i]['share'] += share
                         chunk_dict.update({i: share})
                 reuse = True
@@ -435,3 +498,74 @@ class Delegate:
                 voter_dict[x]['share'] += chunk_dict[x]
         return voter_dict, max_timestamp
 
+
+class Core:
+
+    @staticmethod
+    def send(address, amount, smartbridge, network='ark', secret=config.DELEGATE['SECRET']):
+        api.use(network)
+        tx = core.Transaction(amount=amount, recipientId=address)
+        tx.sign(secret)
+        tx.serialize()
+        for i in range(5):
+            result = api.sendTx(tx)
+            if result['success']:
+                return True
+
+        raise Exception('failed to send transaction 5 times, response: {}'.format(result))
+
+    @staticmethod
+    def send_transaction(data, frq_dict, max_timestamp):
+        # data[0] is always the address.
+        # data[1] is a map having keys
+        #         last_payout, status, share and vote_timestamp.
+
+        day_month = datetime.datetime.today().month
+        day_week = datetime.datetime.today().weekday()
+        address = data[0]
+        amount = 0
+        if config.SHARE['COVER_TX_FEES']:
+            fees = 0
+            del_fees = config.SHARE['FEES']
+        else:
+            fees = config.SHARE['FEES']
+            del_fees = 0
+        if address in config.EXCEPTIONS:
+            amount = ((data[1]['share'] * config.EXCEPTIONS[address]) - fees)
+        else:
+            if config.SHARE['TIMESTAMP_BRACKETS']:
+                for i in config.SHARE['TIMESTAMP_BRACKETS']:
+                    if data[1]['vote_timestamp'] < i:
+                        amount = ((data[1]['share'] *
+                                   config.SHARE['TIMESTAMP_BRACKETS'][i])
+                                  - fees)
+            else:
+                amount = ((data[1]['share'] *
+                           config.SHARE['DEFAULT_SHARE'])
+                          - fees)
+
+        delegate_share = data[1]['share'] - (amount + del_fees)
+        rl.debug('delegateshare for {}: {}'.format(data[0], delegate_share))
+        if address in frq_dict:
+            frequency = frq_dict[address]
+        else:
+            frequency = 2
+
+        if frequency == 1:
+            if data[1]['last_payout'] < max_timestamp - (3600 * 20):
+                if amount > config.SHARE['MIN_PAYOUT_BALANCE_DAILY']:
+                    result = send(address, amount)
+                    return result, delegate_share, amount
+
+        elif frequency == 2 and day_week == 5:
+            if data[1]['last_payout'] < max_timestamp - (3600 * 24):
+                if amount > config.SHARE['MIN_PAYOUT_BALANCE_WEEKLY']:
+                    result = send(address, amount)
+                    return result, delegate_share, amount
+
+        elif frequency == 3 and day_month == 28:
+            if data[1]['last_payout'] < max_timestamp - (3600 * 24 * 24):
+                if amount > config.SHARE['MIN_PAYOUT_BALANCE_MONTHLY']:
+                    result = send(address, amount)
+                    return result, delegate_share, amount
+        return None, 0

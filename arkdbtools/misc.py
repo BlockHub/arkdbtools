@@ -57,8 +57,10 @@ ark.set_delegate(address='AZse3vk8s3QEX1bqijFb21aSBeoF6vqLYE',
 #
 res = ark.Delegate.share(start_block=0,)
 for i in res[0]:
-    print(i, res[0][i]['share'], res[0][i]['status'])
+    print(i, res[0][i]['share']/ark.ARK, res[0][i]['status'], res[0][i]['balance']/ark.ARK)
 sums = 0
 for x in res[0]:
     sums += res[0][x]['share']
-print(sums)
+print(sums/ark.ARK)
+
+print(ark.Address.balance('AXzEMF7TC1aH3ax1Luxk6XdyKXDRxnBj4f')/ark.ARK)

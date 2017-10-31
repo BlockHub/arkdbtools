@@ -48,3 +48,34 @@ single voter, or a map {address: timestamp} to customise it for each voter.
 
 You can use Arky (https://github.com/Moustikitos/arky/) to send the transactions to your voters.
 
+arkdbtools contains a config.py file where different settings influence Delegate.share() flow controls.
+
+>>> CALCULATION SETTINGS{...}
+
+are performed at the.... calculation level.
+
+
+
+>>> 'blacklist': [],
+
+completely removes an address from the calculation. The share is evenly divided over all voters.
+
+
+
+>>> 'exceptions': {'address': {'replace': 'int else None'}},
+
+allows you to replace the amount of Ark someone votes with. Use this to decrease the amount of large voters for example.
+
+
+
+>>> 'max': float('inf'),
+
+This is the maximum value of a voter. If someone votes with more, his voteweight is reduced to the max amount for calculation
+purposes.
+
+
+>>> 'share_fees': False,
+
+A delegate receives both a block reward (2 Ark per block) and transaction fees. Set share_fees to True if you
+wish to share these fees as well. In my experience the average weekly fees for a delegate are 30 Ark +
+

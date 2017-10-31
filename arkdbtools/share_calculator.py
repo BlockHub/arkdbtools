@@ -6,12 +6,12 @@ from .config import *
 def get_transactionlist(cursor, pubkey):
     """returns a list of named tuples of all transactions relevant to a specific delegates voters.
     Flow: finds all voters, SELECTs all transactions of those voters, names all transactions according to
-    the scheme: 'transaction', 'id amount timestamp recipientId senderId rawasset type fee'"""
+    the scheme: 'transaction', 'id amount timestamp recipientId senderId rawasset type fee blockId'"""
     qry = cursor.execute_and_fetchall("""
         SELECT transactions."id", transactions."amount",
                transactions."timestamp", transactions."recipientId",
                transactions."senderId", transactions."rawasset",
-               transactions."type", transactions."fee"
+               transactions."type", transactions."fee", transactions."blockId"
         FROM transactions
         WHERE transactions."senderId" IN
           (SELECT transactions."recipientId"
