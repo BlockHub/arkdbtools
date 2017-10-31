@@ -4,6 +4,7 @@ from arky import api, core
 from .utils import *
 from .share_calculator import *
 
+
 class ApiError(Exception):
     pass
 
@@ -13,12 +14,18 @@ class NodeDbError(Exception):
 
 
 def set_connection(host=None, database=None, user=None, password=None):
+    """Set connection parameters. Call set_connection with no arguments to clear."""
     config.CONNECTION['HOST'] = host
     config.CONNECTION['DATABASE'] = database
     config.CONNECTION['USER'] = user
     config.CONNECTION['PASSWORD'] = password
 
 
+def set_delegate(address=None, pubkey=None, secret=None):
+    """Set delegate parameters. Call set_delegate with no arguments to clear."""
+    config.DELEGATE['ADDRESS'] = address
+    config.DELEGATE['PUBKEY'] = pubkey
+    config.DELEGATE['SECRET'] = secret
 
 class DbConnection:
     def __init__(self):
@@ -82,11 +89,11 @@ class Node:
         return cursor.execute_and_fetchone("""
                             SELECT max(blocks."height") 
                             FROM blocks
-        """)[0][0]
+        """)[0]
 
     @staticmethod
     def check_node(max_difference):
-        if Node.height() - Blockchain.height() <= max_difference:
+        if Blockchain.height() - Node.height() <= max_difference:
                 return True
         else:
             return False
@@ -100,7 +107,7 @@ class Node:
         r = cursor.execute_and_fetchone("""
                 SELECT max(timestamp) 
                 FROM blocks
-        """)[0][0]
+        """)[0]
         if not r:
             raise NodeDbError('failed to get max timestamp from node')
         return r
@@ -109,7 +116,11 @@ class Node:
 class Address:
     @staticmethod
     def transactions(address):
-        cursor = DbCursor
+        """Returns a list of named tuples of all transactions for an address.
+        Scheme:
+        'transaction',
+            'id amount timestamp recipientId senderId rawasset type fee'"""
+        cursor = DbCursor()
         qry = cursor.execute_and_fetchall("""
         SELECT transactions."id", transactions."amount",
                transactions."timestamp", transactions."recipientId",
@@ -117,7 +128,8 @@ class Address:
                transactions."type", transactions."fee"
         FROM transactions
         WHERE transactions."senderId" = '{0}'
-        AND transactions."recipientId" = '{0}'""".format(address))
+        OR transactions."recipientId" = '{0}'
+        ORDER BY transactions."timestamp" ASC""".format(address))
 
         Transaction = namedtuple(
             'transaction',
@@ -142,18 +154,15 @@ class Address:
 
     @staticmethod
     def votes(address):
-        if type(address) == list and len(address) > 1:
-            addresses = 'IN {}'.format(tuple(address))
+        """Returns a map all votes made by an address, {(+/-)pubkeydelegate:timestamp}"""
 
-        else:
-            addresses = '= ' + address
         cursor = DbCursor()
         qry = cursor.execute_and_fetchall("""
-           SELECT votes."votes", transaction."timestamp"
+           SELECT votes."votes", transactions."timestamp"
            FROM votes, transactions
            WHERE transactions."id" = votes."transactionId"
-           AND transactions."recipientId" '{}'
-        """.format(addresses))
+           AND transactions."recipientId" = '{}'
+        """.format(address))
         res = {}
         for i in qry:
             res.update({i[0]: i[1]})
@@ -175,8 +184,51 @@ class Address:
 
 class Delegate:
     @staticmethod
-    def voters(delegate_pubkey):
-        cursor = DbCursor
+    def lastpayout(delegate_address, blacklist=[]):
+        '''
+        Assumes that all send transactions from a delegate are payouts.
+        Use blacklist to remove rewardwallet and other transactions if the
+        address is not a voter. blacklist can contain both addresses and transactionIds'''
+        cursor = DbCursor()
+
+        if len(blacklist) > 1:
+            command_blacklist = 'NOT IN ' + str(tuple(blacklist))
+        elif len(blacklist) == 1:
+            command_blacklist = '!= ' + "'" + blacklist[0] + "'"
+        else:
+            command_blacklist = "!= 'nothing'"
+        qry = cursor.execute_and_fetchall("""
+                    SELECT ts."recipientId", ts."id", ts."timestamp"
+                    FROM transactions ts,
+                      (SELECT MAX(transactions."timestamp") AS max_timestamp, transactions."recipientId"
+                       FROM transactions
+                       WHERE transactions."senderId" = '{0}'
+                       AND transactions."id" {1}
+                       GROUP BY transactions."recipientId") maxresults
+                    WHERE ts."recipientId" = maxresults."recipientId"
+                    AND ts."timestamp"= maxresults.max_timestamp;
+
+                    """.format(delegate_address, command_blacklist))
+        result = []
+
+        Payout = namedtuple(
+            'payout',
+            'address  id timestamp')
+
+        for i in qry:
+            payout = Payout(
+                address=i[0],
+                id=i[1],
+                timestamp=i[2]
+            )
+            result.append(payout)
+        return result
+
+    @staticmethod
+    def votes(delegate_pubkey):
+        """returns every address that has voted for a delegate.
+        Current voters can be obtained using voters"""
+        cursor = DbCursor()
 
         qry = cursor.execute_and_fetchall("""
                  SELECT transactions."recipientId", transactions."timestamp"
@@ -198,12 +250,89 @@ class Delegate:
         return voters
 
     @staticmethod
-    def blocks():
-        pass
+    def unvotes(delegate_pubkey):
+        cursor = DbCursor()
+
+        qry = cursor.execute_and_fetchall("""
+                         SELECT transactions."recipientId", transactions."timestamp"
+                         FROM transactions, votes
+                         WHERE transactions."id" = votes."transactionId"
+                         AND votes."votes" = '-{}';
+                """.format(delegate_pubkey))
+
+        Voter = namedtuple(
+            'voter',
+            'address timestamp')
+
+        unvoters = []
+        for i in qry:
+            unvoter = Voter(
+                address=i[0],
+                timestamp=i[1]
+            )
+            unvoters.append(unvoter)
+        return unvoters
+
+    @staticmethod
+    def voters(delegate_pubkey=None):
+        if not delegate_pubkey:
+            delegate_pubkey = DELEGATE['PUBKEY']
+        votes = Delegate.votes(delegate_pubkey)
+        unvotes = Delegate.unvotes(delegate_pubkey)
+        for count, i in enumerate(votes):
+            for x in unvotes:
+                if i.address == x.address and i.timestamp < x.timestamp:
+                    del votes[count]
+        return votes
 
 
     @staticmethod
-    def share(passphrase=None, last_payout=None):
+    def blocks(delegate_pubkey=None, max_timestamp=None):
+        """returns a list of named tuples of all blocks forged by a delegate.
+        if delegate_pubkey is not specified, set_delegate needs to be called in advance.
+        max_timestamp can be configured o retrieve blocks up to a certain timestamp."""
+
+        if not delegate_pubkey:
+            delegate_pubkey = DELEGATE['PUBKEY']
+        if max_timestamp:
+            max_timestamp_sql = """ blocks."timestamp" <= {} AND""".format(max_timestamp)
+        else:
+            max_timestamp_sql = ''
+        cursor = DbCursor()
+
+        qry = cursor.execute_and_fetchall("""
+             SELECT blocks."timestamp", blocks."height", blocks."id"
+             FROM blocks
+             WHERE {0} blocks."generatorPublicKey" = '\\x{1}'
+             ORDER BY blocks."timestamp" 
+             ASC""".format(
+            max_timestamp_sql,
+            delegate_pubkey))
+
+        Block = namedtuple('block',
+                           'timestamp height id')
+        block_list = []
+        for block in qry:
+            block_value = Block(timestamp=block[0],
+                                height=block[1],
+                                id=block[2], )
+            block_list.append(block_value)
+
+        return block_list
+
+    @staticmethod
+    def share(passphrase=None, last_payout=None, start_block=0):
+        """Calculate the true blockweight payout share for a given delegate,
+        assuming no exceptions were made for a voter. last_payout is a map of addresses and timestamps:
+        {address: timestamp}. If no argument are given, it will start the calculation at the first forged block
+        by the delegate, generate a last_payout from transaction history, and use the set_delegate info.
+
+        If a passphrase is provided, it is only used to generate the adddress and keys, no transactions are sent.
+        (Still not recommended unless you know what you are doing, version control could store your passphrase for example;
+        very risky)
+        """
+
+        #todo allow last_payout to be a single int, add blacklisting settings and max balance for calculations.
         cursor = DbCursor()
 
         if passphrase:
@@ -219,40 +348,88 @@ class Delegate:
 
         max_timestamp = Node.max_timestamp()
 
+        # utils function
         transactions = get_transactionlist(
                             cursor=cursor,
-                            max_timestamp=max_timestamp,
                             pubkey=delegate_pubkey)
 
-        voters = get_all_voters(
-            cursor=cursor,
-            max_timestamp=max_timestamp,
-            pubkey=delegate_pubkey
-        )
-
-        blocks = get_blocks(
-            cursor=cursor,
-            max_timestamp=max_timestamp,
-            pubkey=delegate_pubkey
-        )
+        votes = Delegate.votes(delegate_pubkey)
 
         if not last_payout:
-            last_payout = get_last_payout(
-                cursor=cursor,
-                address=delegate_address
-            )
-        block_nr = 0
+            last_payout = Delegate.lastpayout(delegate_address)
 
+        # create a map of voters
+        voter_dict = {}
+        for voter in votes:
+            voter_dict.update({voter.address: {'balance': 0.0,
+                                               'status': False,
+                                               'last_payout': voter.timestamp,
+                                               'share': 0.0,
+                                               'vote_timestamp': voter.timestamp}})
+        try:
+            for i in config.ULTRABLACKLIST:
+                voter_dict.pop(i, None)
+        except Exception:
+            pass
+
+        # update the last_payout.
+        for payout in last_payout:
+            try:
+                voter_dict[payout.address]['last_payout'] = payout.timestamp
+            except Exception:
+                pass
+
+
+        # get all forged blocks of delegate:
+        blocks = Delegate.blocks(max_timestamp=max_timestamp)
+
+        block_nr = start_block
+        chunk_dict = {}
+        reuse = False
         for tx in transactions:
-            if tx.timestamp >= blocks[block_nr].timestamp:
-                cal_share(voters, last_payout, tx)
-            else:
-                parse(
-                    tx=tx,
-                    dict=voters,
-                    address=delegate_address,
-                    pubkey=delegate_pubkey
-                      )
+            while tx.timestamp > blocks[block_nr].timestamp:
+                if reuse:
+                    block_nr +=1
+                    for x in chunk_dict:
+                        voter_dict[x]['share'] += chunk_dict[x]
+                    continue
+                block_nr += 1
+                poolbalance = 0
+                chunk_dict = {}
+                for i in voter_dict:
+                    if voter_dict[i]['balance'] < 0:
+                        raise Exception('Negative balance for {}'.format(i))
+                    if voter_dict[i]['status']:
+                        poolbalance += voter_dict[i]['balance']
+                for i in voter_dict:
+                    if voter_dict[i]['status'] and voter_dict[i]['last_payout'] < blocks[block_nr].timestamp:
+                        share = (voter_dict[i]['balance']/poolbalance) * 2
+                        voter_dict[i]['share'] += share
+                        chunk_dict.update({i: share})
 
-        return voters, max_timestamp
+                suma = 0
+                for t in voter_dict:
+                    suma += voter_dict[t]['share']
+                reuse = True
+
+
+            # parsing a transaction
+            minvote = '{{"votes":["-{0}"]}}'.format(delegate_pubkey)
+            plusvote = '{{"votes":["+{0}"]}}'.format(delegate_pubkey)
+
+            reuse = False
+            if tx.recipientId in voter_dict:
+                voter_dict[tx.recipientId]['balance'] += tx.amount
+            if tx.senderId in voter_dict:
+                voter_dict[tx.senderId]['balance'] -= (tx.amount + tx.fee)
+            if tx.senderId in voter_dict and tx.type == 3 and plusvote in tx.rawasset:
+                voter_dict[tx.senderId]['status'] = True
+            if tx.senderId in voter_dict and tx.type == 3 and minvote in tx.rawasset:
+                voter_dict[tx.senderId]['status'] = False
+
+        remaining_blocks = len(blocks) - block_nr
+        for i in range(remaining_blocks):
+            for x in chunk_dict:
+                voter_dict[x]['share'] += chunk_dict[x]
+        return voter_dict, max_timestamp
 
