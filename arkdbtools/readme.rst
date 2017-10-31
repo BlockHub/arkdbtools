@@ -1,33 +1,33 @@
 arkdbtools
 --------
 
-To use, simply do::
+To use, simply do:
 
     >>> pip install arkdbtools
 
 This library requires a running ark-node to operate: https://github.com/ArkEcosystem/ark-node.
 
-First create a new psql user::
-    >>> $sudo -u postgres createuser <username>
+First create a new psql user:
+     $sudo -u postgres createuser <username>
 
 You can add a password for security reasons, this is not necessary if you run your programs using a local
 node, but a must if you ar querying over the internet.
 
-    >>> $sudo -u postgres psql
-    >>> psql=# ALTER USER <username> WITH ENCRYPTED PASSWORD '<password>';
+     $sudo -u postgres psql
+      psql=# ALTER USER <username> WITH ENCRYPTED PASSWORD '<password>';
 
 Next we give the user SELECT only privilege. This ensures you don't mess with the ark-database, which would
 otherwise break your node. Not necessary if you know what you are doing.
 
-    >>> psql=# GRANT SELECT ON ALL TABLES IN SCHEMA public TO <username>;
+      psql=# GRANT SELECT ON ALL TABLES IN SCHEMA public TO <username>;
 
 When using arkdbtools, set the connection parameters first:
 
     >>> import arkdbtools as ark
-    >>> ark.set_connection(host='localhost',
-                       database='ark_mainnet',
-                       user=<username>,
-                       password=<password>,)
+    >>> ark.set_connection(host='localhost',\
+                           database='ark_mainnet',\
+                           user=<username>,\
+                           password=<password>,)
 
 Now if you want to calculate the trueblockweight share for a given delegate, we set delegate parameters first:
 If you specifiy your passphrase, arkdbtools will generate your keys using Arky (by Toons).
