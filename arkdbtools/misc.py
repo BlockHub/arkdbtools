@@ -14,4 +14,7 @@ if __name__ == '__main__':
         database='ark_mainnet',
         user='ark')
 
+    print('starting')
     payouts, timestamp = dbtools.Delegate.share()
+    for i in payouts:
+        print(i, payouts[i])

@@ -51,8 +51,10 @@ SENDER_SETTINGS = {
     # 0 is monday. 6 is sunday
     'DAY_WEEKLY_PAYOUT': 5,
     'DAY_MONTHLY_PAYOUT': 24,
-    'PAYOUTSENDER_TEST': True
-
+    'PAYOUTSENDER_TEST': True,
+    'SENDER_EXCEPTION': {'address': {'frequency':   3,
+                                     'amount':      50*ARK}
+                         }
 }
 
 
