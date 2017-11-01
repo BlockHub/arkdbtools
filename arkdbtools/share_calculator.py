@@ -1,5 +1,4 @@
 from collections import namedtuple
-import copy
 
 
 def get_transactionlist(cursor, pubkey):
