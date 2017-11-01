@@ -6,6 +6,11 @@ from .share_calculator import *
 import binascii
 import datetime
 
+
+class TxParameterError:
+    pass
+
+
 class ApiError(Exception):
     pass
 
@@ -368,8 +373,6 @@ class Delegate:
         (Still not recommended unless you know what you are doing, version control could store your passphrase for example;
         very risky)
         """
-
-        #todo allow last_payout to be a single int, add blacklisting settings and max balance for calculations.
         cursor = DbCursor()
 
         if passphrase:
@@ -392,8 +395,6 @@ class Delegate:
 
         votes = Delegate.votes(delegate_pubkey)
 
-        if not last_payout:
-            last_payout = Delegate.lastpayout(delegate_address)
 
         # create a map of voters
         voter_dict = {}
@@ -417,13 +418,18 @@ class Delegate:
         except Exception:
             pass
 
-        # update the last_payout.
-        for payout in last_payout:
-            try:
-                voter_dict[payout.address]['last_payout'] = payout.timestamp
-            except Exception:
-                pass
+        if not last_payout:
+            last_payout = Delegate.lastpayout(delegate_address)
+            for payout in last_payout:
+                try:
+                    voter_dict[payout.address]['last_payout'] = payout.timestamp
+                except Exception:
+                    pass
 
+        elif last_payout == int:
+            for address in voter_dict:
+                if address['vote_timestamp'] < last_payout:
+                    address['last_payout'] = last_payout
 
         # get all forged blocks of delegate:
         blocks = Delegate.blocks(max_timestamp=max_timestamp)
@@ -458,6 +464,7 @@ class Delegate:
                             poolbalance += balance
                         else:
                             raise Exception('balance lower than zero for: {0}'.format(i))
+
                 for i in voter_dict:
                     balance = voter_dict[i]['balance']
 
@@ -502,9 +509,11 @@ class Delegate:
 class Core:
 
     @staticmethod
-    def send(address, amount, smartbridge, network='ark', secret=config.DELEGATE['SECRET']):
+    def send(address, amount, smartbridge=None, network='ark', secret=config.DELEGATE['SECRET']):
         api.use(network)
-        tx = core.Transaction(amount=amount, recipientId=address)
+        tx = core.Transaction(amount=amount,
+                              recipientId=address,
+                              vendorField=smartbridge)
         tx.sign(secret)
         tx.serialize()
         for i in range(5):
@@ -522,50 +531,52 @@ class Core:
 
         day_month = datetime.datetime.today().month
         day_week = datetime.datetime.today().weekday()
+
         address = data[0]
         amount = 0
-        if config.SHARE['COVER_TX_FEES']:
+        if config.SENDER_SETTINGS['COVER_FEES']:
             fees = 0
-            del_fees = config.SHARE['FEES']
+            del_fees = TX_FEE
         else:
-            fees = config.SHARE['FEES']
+            fees = TX_FEE
             del_fees = 0
-        if address in config.EXCEPTIONS:
-            amount = ((data[1]['share'] * config.EXCEPTIONS[address]) - fees)
+        if address in config.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS']:
+            amount = ((data[1]['share'] * config.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS']) - fees)
         else:
-            if config.SHARE['TIMESTAMP_BRACKETS']:
-                for i in config.SHARE['TIMESTAMP_BRACKETS']:
-                    if data[1]['vote_timestamp'] < i:
+            if config.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
+                for i in config.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
+                    if data[1]['VOTE_TIMESTAMP'] < i:
                         amount = ((data[1]['share'] *
-                                   config.SHARE['TIMESTAMP_BRACKETS'][i])
+                                   config.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i])
                                   - fees)
             else:
                 amount = ((data[1]['share'] *
-                           config.SHARE['DEFAULT_SHARE'])
+                           config.SENDER_SETTINGS['DEFAULT_SHARE'])
                           - fees)
 
         delegate_share = data[1]['share'] - (amount + del_fees)
-        rl.debug('delegateshare for {}: {}'.format(data[0], delegate_share))
+
         if address in frq_dict:
             frequency = frq_dict[address]
         else:
             frequency = 2
 
         if frequency == 1:
-            if data[1]['last_payout'] < max_timestamp - (3600 * 20):
-                if amount > config.SHARE['MIN_PAYOUT_BALANCE_DAILY']:
-                    result = send(address, amount)
+            if data[1]['LAST_PAYOUT'] < max_timestamp - DAY_SEC:
+                if amount > config.SENDER_SETTINGS['MIN_PAYOUT_DAILY']:
+                    result = Core.send(address, amount)
                     return result, delegate_share, amount
 
-        elif frequency == 2 and day_week == 5:
-            if data[1]['last_payout'] < max_timestamp - (3600 * 24):
-                if amount > config.SHARE['MIN_PAYOUT_BALANCE_WEEKLY']:
-                    result = send(address, amount)
+        elif frequency == 2 and day_week == config.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT']:
+            if data[1]['LAST_PAYOUT'] < max_timestamp - WEEK_SEC:
+                if amount > config.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY']:
+                    result = Core.send(address, amount)
                     return result, delegate_share, amount
 
-        elif frequency == 3 and day_month == 28:
-            if data[1]['last_payout'] < max_timestamp - (3600 * 24 * 24):
-                if amount > config.SHARE['MIN_PAYOUT_BALANCE_MONTHLY']:
-                    result = send(address, amount)
+        elif frequency == 3 and day_month == config.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT']:
+            if data[1]['LAST_PAYOUT'] < max_timestamp - MONTH_SEC - WEEK_SEC:
+                if amount > config.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY']:
+                    result = Core.send(address, amount)
                     return result, delegate_share, amount
-        return None, 0
+        raise TxParameterError
+
