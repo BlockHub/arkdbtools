@@ -1,5 +1,5 @@
 import logging
-
+import logging.handlers
 MIN_SEC = 60
 HOUR_SEC = MIN_SEC * 60
 DAY_SEC = HOUR_SEC * 24
@@ -59,6 +59,10 @@ SENDER_SETTINGS = {
 LOGGING = {
     'USE': True,
     'LEVEL': logging.DEBUG,
-    'HANDLER': logging.StreamHandler(),
+    'HANDLER': logging.handlers.RotatingFileHandler('/tmp/arkdbtools.log',
+                                                    encoding='utf-8',
+                                                    maxBytes=10*1024*1024,
+                                                    backupCount=5),
+
     'FORMAT': '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 }
