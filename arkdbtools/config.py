@@ -49,8 +49,16 @@ SENDER_SETTINGS = {
     # 0 is monday. 6 is sunday
     'DAY_WEEKLY_PAYOUT': 5,
     'DAY_MONTHLY_PAYOUT': 24,
-
+    'PAYOUTSENDER_TEST': True
 
 }
 
 
+LOGGING = {
+    # log to this file and create -1, -2 etc. for historical versions
+    'logfile'  : '/tmp/ark.log',
+    # debugging: on or off
+    'verbosity': True,
+    # max size of the logfile before it gets rotated to <file>-1
+    'maxsize'  : 1024 * 1024
+}

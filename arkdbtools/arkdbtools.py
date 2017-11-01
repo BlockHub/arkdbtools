@@ -1,13 +1,17 @@
-from .config import *
 import psycopg2
 from arky import api, core
-from .utils import *
-from .share_calculator import *
+import utils
+import share_calculator as sc
+import config as c
+from collections import namedtuple
 import binascii
 import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-class TxParameterError:
+class TxParameterError(Exception):
     pass
 
 
@@ -21,24 +25,29 @@ class NodeDbError(Exception):
 
 def set_connection(host=None, database=None, user=None, password=None):
     """Set connection parameters. Call set_connection with no arguments to clear."""
-    config.CONNECTION['HOST'] = host
-    config.CONNECTION['DATABASE'] = database
-    config.CONNECTION['USER'] = user
-    config.CONNECTION['PASSWORD'] = password
+    c.CONNECTION['HOST'] = host
+    c.CONNECTION['DATABASE'] = database
+    c.CONNECTION['USER'] = user
+    c.CONNECTION['PASSWORD'] = password
 
 
 def set_delegate(address=None, pubkey=None, secret=None):
     """Set delegate parameters. Call set_delegate with no arguments to clear."""
-    config.DELEGATE['ADDRESS'] = address
-    config.DELEGATE['PUBKEY'] = pubkey
-    config.DELEGATE['SECRET'] = secret
+    c.DELEGATE['ADDRESS'] = address
+    c.DELEGATE['PUBKEY'] = pubkey
+    c.DELEGATE['SECRET'] = secret
+
 
 class DbConnection:
     def __init__(self):
-        self._conn = psycopg2.connect(host=config.CONNECTION['HOST'],
-                                      database=config.CONNECTION['DATABASE'],
-                                      user=config.CONNECTION['USER'],
-                                      password=config.CONNECTION['PASSWORD'])
+        try:
+            self._conn = psycopg2.connect(host=c.CONNECTION['HOST'],
+                                          database=c.CONNECTION['DATABASE'],
+                                          user=c.CONNECTION['USER'],
+                                          password=c.CONNECTION['PASSWORD'])
+        except Exception as e:
+            logger.exception('failed to connect to ark-node: {}'.format(e))
+            raise e
 
     def connection(self):
         return self._conn
@@ -76,14 +85,13 @@ class Blockchain():
         for i in range(redundancy):
             try:
                 api.use('ark')
-                height.append(api_call(function)['height'])
-            except Exception:
+                height.append(utils.api_call(function)['height'])
+            except:
                 pass
 
         if not height:
-            raise ApiError(
-                'Could not get a result through '
-                'api for {0}, with redundancy: {1}'.format(function, redundancy)
+            logger.fatal(
+                'Could not get a result through api for {0}, with redundancy: {1}'.format(function, redundancy)
             )
         return max(height)
 
@@ -91,11 +99,19 @@ class Blockchain():
 class Node:
     @staticmethod
     def height():
-        cursor = DbCursor()
-        return cursor.execute_and_fetchone("""
+        try:
+            cursor = DbCursor()
+            res = cursor.execute_and_fetchone("""
                             SELECT max(blocks."height") 
                             FROM blocks
-        """)[0]
+            """)[0]
+        except Exception as e:
+            logger.exception(e)
+        else:
+            if not res:
+                logger.fatal('Received an empty from the ark-db')
+                raise NodeDbError
+
 
     @staticmethod
     def check_node(max_difference):
@@ -115,7 +131,8 @@ class Node:
                 FROM blocks
         """)[0]
         if not r:
-            raise NodeDbError('failed to get max timestamp from node')
+            logger.fatal('failed to get max timestamp from node')
+            raise NodeDbError
         return r
 
 
@@ -196,6 +213,7 @@ class Address:
 
 
 class Delegate:
+
     @staticmethod
     def delegates():
         """returns a list of named tuples of all delegates.
@@ -223,9 +241,8 @@ class Delegate:
             res.append(registration)
         return res
 
-
     @staticmethod
-    def lastpayout(delegate_address, blacklist=[]):
+    def lastpayout(delegate_address, blacklist=None):
         '''
         Assumes that all send transactions from a delegate are payouts.
         Use blacklist to remove rewardwallet and other transactions if the
@@ -317,7 +334,7 @@ class Delegate:
     @staticmethod
     def voters(delegate_pubkey=None):
         if not delegate_pubkey:
-            delegate_pubkey = DELEGATE['PUBKEY']
+            delegate_pubkey = c.DELEGATE['PUBKEY']
         votes = Delegate.votes(delegate_pubkey)
         unvotes = Delegate.unvotes(delegate_pubkey)
         for count, i in enumerate(votes):
@@ -333,7 +350,7 @@ class Delegate:
         max_timestamp can be configured o retrieve blocks up to a certain timestamp."""
 
         if not delegate_pubkey:
-            delegate_pubkey = DELEGATE['PUBKEY']
+            delegate_pubkey = c.DELEGATE['PUBKEY']
         if max_timestamp:
             max_timestamp_sql = """ blocks."timestamp" <= {} AND""".format(max_timestamp)
         else:
@@ -373,6 +390,7 @@ class Delegate:
         (Still not recommended unless you know what you are doing, version control could store your passphrase for example;
         very risky)
         """
+        logger.info('starting share calculation using settings:\\ {0}\\ {1}'.format(c.DELEGATE, c.CALCULATION_SETTINGS))
         cursor = DbCursor()
 
         if passphrase:
@@ -383,13 +401,16 @@ class Delegate:
             delegate_pubkey = delegate_keys.public
             delegate_address = core.getAddress(keys=delegate_keys)
         else:
-            delegate_pubkey = config.DELEGATE['PUBKEY']
-            delegate_address = config.DELEGATE['ADDRESS']
+            delegate_pubkey = c.DELEGATE['PUBKEY']
+            delegate_address = c.DELEGATE['ADDRESS']
+
+        logger.info('Starting share calculation, using address:{0}, pubkey:{1}'.format(delegate_address, delegate_pubkey))
 
         max_timestamp = Node.max_timestamp()
+        logger.info('Share calculation max_timestamp = {}'.format(max_timestamp))
 
         # utils function
-        transactions = get_transactionlist(
+        transactions = sc.get_transactionlist(
                             cursor=cursor,
                             pubkey=delegate_pubkey)
 
@@ -411,11 +432,13 @@ class Delegate:
         for i in delegates:
             if i.address in voter_dict:
                 voter_dict[i.address]['blocks_forged'].extend(Delegate.blocks(i.pubkey))
+                logger.info('A registered delegate is a voter: {}'.format(voter_dict[i.address]))
 
         try:
-            for i in config.CALCULATION_SETTINGS['blacklist']:
+            for i in c.CALCULATION_SETTINGS['blacklist']:
                 voter_dict.pop(i)
-        except Exception:
+                logger.debug('popped {} from calculations'.format(i))
+        except:
             pass
 
         if not last_payout:
@@ -423,13 +446,21 @@ class Delegate:
             for payout in last_payout:
                 try:
                     voter_dict[payout.address]['last_payout'] = payout.timestamp
-                except Exception:
+                except:
                     pass
-
-        elif last_payout == int:
+        elif type(last_payout) is int:
             for address in voter_dict:
                 if address['vote_timestamp'] < last_payout:
                     address['last_payout'] = last_payout
+        elif type(last_payout) is dict:
+            for payout in last_payout:
+                try:
+                    voter_dict[payout.address]['last_payout'] = payout.timestamp
+                except:
+                    pass
+        else:
+            logger.fatal('last_payout object not recognised by program: {}'.format(type(last_payout)))
+            raise Exception
 
         # get all forged blocks of delegate:
         blocks = Delegate.blocks(max_timestamp=max_timestamp)
@@ -440,7 +471,7 @@ class Delegate:
         for tx in transactions:
             while tx.timestamp > blocks[block_nr].timestamp:
                 if reuse:
-                    block_nr +=1
+                    block_nr += 1
                     for x in chunk_dict:
                         voter_dict[x]['share'] += chunk_dict[x]
                     continue
@@ -449,10 +480,10 @@ class Delegate:
                 chunk_dict = {}
                 for i in voter_dict:
                     balance = voter_dict[i]['balance']
-                    if voter_dict[i]['balance'] > config.CALCULATION_SETTINGS['max']:
-                        balance = config.CALCULATION_SETTINGS['max']
-                    if i in config.CALCULATION_SETTINGS['exceptions']:
-                        balance = config.CALCULATION_SETTINGS['exceptions'][i]
+                    if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['max']:
+                        balance = c.CALCULATION_SETTINGS['max']
+                    if i in c.CALCULATION_SETTINGS['exceptions']:
+                        balance = c.CALCULATION_SETTINGS['exceptions'][i]
 
                     if voter_dict[i]['blocks_forged']:
                         for x in voter_dict[i]['blocks_forged']:
@@ -463,18 +494,19 @@ class Delegate:
                         if not voter_dict[i]['balance'] < 0:
                             poolbalance += balance
                         else:
-                            raise Exception('balance lower than zero for: {0}'.format(i))
+                            logger.fatal('balance lower than zero for: {0}'.format(i))
+                            raise Exception
 
                 for i in voter_dict:
                     balance = voter_dict[i]['balance']
 
-                    if voter_dict[i]['balance'] > config.CALCULATION_SETTINGS['max']:
-                        balance = config.CALCULATION_SETTINGS['max']
-                    if i in config.CALCULATION_SETTINGS['exceptions']:
-                        balance = config.CALCULATION_SETTINGS['exceptions'][i]
+                    if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['MAX']:
+                        balance = c.CALCULATION_SETTINGS['MAX']
+                    if i in c.CALCULATION_SETTINGS['EXCEPTIONS']:
+                        balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]
 
                     if voter_dict[i]['status'] and voter_dict[i]['last_payout'] < blocks[block_nr].timestamp:
-                        if config.CALCULATION_SETTINGS['share_fees']:
+                        if c.CALCULATION_SETTINGS['SHARE_FEES']:
                             share = (balance/poolbalance) * (blocks[block_nr].reward +
                                                              blocks[block_nr].totalFee)
                         else:
@@ -499,7 +531,7 @@ class Delegate:
             if tx.senderId in voter_dict and tx.type == 3 and minvote in tx.rawasset:
                 voter_dict[tx.senderId]['status'] = False
 
-        remaining_blocks = len(blocks) - block_nr
+        remaining_blocks = len(blocks) - block_nr - 1
         for i in range(remaining_blocks):
             for x in chunk_dict:
                 voter_dict[x]['share'] += chunk_dict[x]
@@ -509,7 +541,9 @@ class Delegate:
 class Core:
 
     @staticmethod
-    def send(address, amount, smartbridge=None, network='ark', secret=config.DELEGATE['SECRET']):
+    def send(address, amount, smartbridge=None, network='ark', secret=c.DELEGATE['SECRET']):
+        if c.SENDER_SETTINGS['PAYOUTSENDER_TEST']:
+            logger.debug('Transaction test send to {0} for amount: {1} with smartbridge: {2}'.format(address, amount, smartbridge))
         api.use(network)
         tx = core.Transaction(amount=amount,
                               recipientId=address,
@@ -518,10 +552,13 @@ class Core:
         tx.serialize()
         for i in range(5):
             result = api.sendTx(tx)
+            logger.debug(result)
             if result['success']:
+                logger.debug(result)
                 return True
 
-        raise Exception('failed to send transaction 5 times, response: {}'.format(result))
+        logger.fatal('failed to send transaction 5 times, response: {}'.format(result))
+        raise Exception
 
     @staticmethod
     def send_transaction(data, frq_dict, max_timestamp):
@@ -534,24 +571,24 @@ class Core:
 
         address = data[0]
         amount = 0
-        if config.SENDER_SETTINGS['COVER_FEES']:
+        if c.SENDER_SETTINGS['COVER_FEES']:
             fees = 0
-            del_fees = TX_FEE
+            del_fees = c.TX_FEE
         else:
-            fees = TX_FEE
+            fees = c.TX_FEE
             del_fees = 0
-        if address in config.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS']:
-            amount = ((data[1]['share'] * config.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS']) - fees)
+        if address in c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS']:
+            amount = ((data[1]['share'] * c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS']) - fees)
         else:
-            if config.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
-                for i in config.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
+            if c.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
+                for i in c.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
                     if data[1]['VOTE_TIMESTAMP'] < i:
                         amount = ((data[1]['share'] *
-                                   config.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i])
+                                   c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i])
                                   - fees)
             else:
                 amount = ((data[1]['share'] *
-                           config.SENDER_SETTINGS['DEFAULT_SHARE'])
+                           c.SENDER_SETTINGS['DEFAULT_SHARE'])
                           - fees)
 
         delegate_share = data[1]['share'] - (amount + del_fees)
@@ -562,21 +599,22 @@ class Core:
             frequency = 2
 
         if frequency == 1:
-            if data[1]['LAST_PAYOUT'] < max_timestamp - DAY_SEC:
-                if amount > config.SENDER_SETTINGS['MIN_PAYOUT_DAILY']:
+            if data[1]['LAST_PAYOUT'] < max_timestamp - c.DAY_SEC:
+                if amount > c.SENDER_SETTINGS['MIN_PAYOUT_DAILY']:
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
 
-        elif frequency == 2 and day_week == config.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT']:
-            if data[1]['LAST_PAYOUT'] < max_timestamp - WEEK_SEC:
-                if amount > config.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY']:
+        elif frequency == 2 and day_week == c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT']:
+            if data[1]['LAST_PAYOUT'] < max_timestamp - c.WEEK_SEC:
+                if amount > c.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY']:
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
 
-        elif frequency == 3 and day_month == config.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT']:
-            if data[1]['LAST_PAYOUT'] < max_timestamp - MONTH_SEC - WEEK_SEC:
-                if amount > config.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY']:
+        elif frequency == 3 and day_month == c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT']:
+            if data[1]['LAST_PAYOUT'] < max_timestamp - c.MONTH_SEC - c.WEEK_SEC:
+                if amount > c.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY']:
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
+        logger.debug('tx did not pass the required parameters for sending (should happen often) : {}'.format(data))
         raise TxParameterError
 

@@ -1,6 +1,5 @@
 from collections import namedtuple
 import copy
-from .config import *
 
 
 def get_transactionlist(cursor, pubkey):
