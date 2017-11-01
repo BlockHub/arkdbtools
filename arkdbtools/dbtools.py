@@ -8,9 +8,17 @@ import binascii
 import datetime
 import logging
 
-logger = logging.getLogger(__name__)
-
-
+if c.LOGGING['USE']:
+    logger = logging.getLogger(__name__)
+    handler = c.LOGGING['HANDLER']
+    formatter = logging.Formatter(c.LOGGING['FORMAT'])
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(c.LOGGING['LEVEL'])
+else:
+    logger = logging.getLogger(__name__)
+    logger.propagate = False
+    print('No logger enabled')
 class TxParameterError(Exception):
     pass
 
@@ -249,9 +257,9 @@ class Delegate:
         address is not a voter. blacklist can contain both addresses and transactionIds'''
         cursor = DbCursor()
 
-        if len(blacklist) > 1:
+        if blacklist and len(blacklist) > 1:
             command_blacklist = 'NOT IN ' + str(tuple(blacklist))
-        elif len(blacklist) == 1:
+        elif blacklist and len(blacklist) == 1:
             command_blacklist = '!= ' + "'" + blacklist[0] + "'"
         else:
             command_blacklist = "!= 'nothing'"
@@ -431,8 +439,13 @@ class Delegate:
         delegates = Delegate.delegates()
         for i in delegates:
             if i.address in voter_dict:
-                voter_dict[i.address]['blocks_forged'].extend(Delegate.blocks(i.pubkey))
-                logger.info('A registered delegate is a voter: {}'.format(voter_dict[i.address]))
+                logger.info('A registered delegate is a voter: {0}, {1}, {2}'.format(i.username, i.address, i.pubkey))
+                try:
+                    blocks_by_voter = Delegate.blocks(i.pubkey)
+                    voter_dict[i.address]['blocks_forged'].extend(Delegate.blocks(i.pubkey))
+                    logger.info('delegate {0} has forged {1} blocks'.format(i.username, len(blocks_by_voter)))
+                except:
+                    logger.info('delegate {} has not forged any blocks'.format(i))
 
         try:
             for i in c.CALCULATION_SETTINGS['blacklist']:
@@ -480,10 +493,10 @@ class Delegate:
                 chunk_dict = {}
                 for i in voter_dict:
                     balance = voter_dict[i]['balance']
-                    if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['max']:
-                        balance = c.CALCULATION_SETTINGS['max']
-                    if i in c.CALCULATION_SETTINGS['exceptions']:
-                        balance = c.CALCULATION_SETTINGS['exceptions'][i]
+                    if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['MAX']:
+                        balance = c.CALCULATION_SETTINGS['MAX']
+                    if i in c.CALCULATION_SETTINGS['EXCEPTIONS']:
+                        balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]
 
                     if voter_dict[i]['blocks_forged']:
                         for x in voter_dict[i]['blocks_forged']:
@@ -535,6 +548,12 @@ class Delegate:
         for i in range(remaining_blocks):
             for x in chunk_dict:
                 voter_dict[x]['share'] += chunk_dict[x]
+        for i in voter_dict:
+            logger.info("{0}  {1}  {2}  {3}  {4}".format(i,
+                                                         voter_dict[i]['share'],
+                                                         voter_dict[i]['status'],
+                                                         voter_dict[i]['last_payout'],
+                                                         voter_dict[i]['vote_timestamp']))
         return voter_dict, max_timestamp
 
 

@@ -1,3 +1,5 @@
+import logging
+
 MIN_SEC = 60
 HOUR_SEC = MIN_SEC * 60
 DAY_SEC = HOUR_SEC * 24
@@ -55,10 +57,8 @@ SENDER_SETTINGS = {
 
 
 LOGGING = {
-    # log to this file and create -1, -2 etc. for historical versions
-    'logfile'  : '/tmp/ark.log',
-    # debugging: on or off
-    'verbosity': True,
-    # max size of the logfile before it gets rotated to <file>-1
-    'maxsize'  : 1024 * 1024
+    'USE': True,
+    'LEVEL': logging.DEBUG,
+    'HANDLER': logging.StreamHandler(),
+    'FORMAT': '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 }
