@@ -50,3 +50,36 @@ class TestSet_sender(TestCase):
             sender_exception='11'
                    )
         self.assertCountEqual(c.SENDER_SETTINGS, resultset)
+
+    def test_set_sender_clear(self):
+        from arkdbtools import config as c
+        from arkdbtools.dbtools import set_sender
+
+        resultset = {
+            'DEFAULT_SHARE': None,
+            'COVER_FEES': None,
+            'SHARE_PERCENTAGE_EXCEPTIONS': None,
+            'TIMESTAMP_BRACKETS': None,
+            'MIN_PAYOUT_DAILY': None,
+            'MIN_PAYOUT_WEEKLY': None,
+            'MIN_PAYOUT_MONTHLY': None,
+            'DAY_WEEKLY_PAYOUT': None,
+            'DAY_MONTHLY_PAYOUT': None,
+            'PAYOUTSENDER_TEST': None,
+            'SENDER_EXCEPTION': None
+        }
+
+        c.SENDER_SETTINGS['DEFAULT_SHARE'] = '1'
+        c.SENDER_SETTINGS['COVER_FEES'] = '2'
+        c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'] = '3'
+        c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'] = '4'
+        c.SENDER_SETTINGS['MIN_PAYOUT_DAILY'] = '5'
+        c.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY'] = '6'
+        c.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY'] = '7'
+        c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT'] = '8'
+        c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT'] = '9'
+        c.SENDER_SETTINGS['PAYOUTSENDER_TEST'] = '10'
+        c.SENDER_SETTINGS['SENDER_EXCEPTION'] = '11'
+
+        set_sender()
+        self.assertCountEqual(c.SENDER_SETTINGS, resultset)

@@ -23,3 +23,21 @@ class TestSet_delegate(TestCase):
             pubkey=  '2',
             secret=  '3')
         self.assertCountEqual(c.DELEGATE, resultset)
+
+    def test_set_delegate_clear(self):
+        from arkdbtools.dbtools import set_delegate
+        from arkdbtools import config as c
+
+        resultset = {
+            'ADDRESS': None,
+            'PUBKEY': None,
+            'SECRET': None,
+        }
+
+        c.DELEGATE['ADDRESS'] = '1'
+        c.DELEGATE['PUBKEY'] = '2'
+        c.DELEGATE['SECRET'] = '3'
+
+        set_delegate()
+
+        self.assertCountEqual(c.DELEGATE, resultset)
