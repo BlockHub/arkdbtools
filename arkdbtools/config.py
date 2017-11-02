@@ -27,10 +27,11 @@ DELEGATE = {
 ARK = 100000000
 TX_FEE = 10000000
 
-CALCULATION_SETTINGS = {'BLACKLIST': [],
-                        'EXCEPTIONS': {'address': {'replace': 'int else None'}},
-                        'MAX': float('inf'),
-                        'SHARE_FEES': False,
+CALCULATION_SETTINGS = {
+    'BLACKLIST': [],
+    'EXCEPTIONS': {'address': {'replace': 'int else None'}},
+    'MAX': float('inf'),
+    'SHARE_FEES': False,
 }
 
 SENDER_SETTINGS = {

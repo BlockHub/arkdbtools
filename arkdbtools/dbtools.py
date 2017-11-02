@@ -1,8 +1,8 @@
 import psycopg2
 from arky import api, core
-import utils
-import share_calculator as sc
-import config as c
+import arkdbtools.utils as utils
+import arkdbtools.share_calculator as sc
+import arkdbtools.config as c
 from collections import namedtuple
 import binascii
 import datetime
@@ -37,6 +37,9 @@ class NodeDbError(Exception):
 class NegativeBalanceError(Exception):
     pass
 
+class ParseError(Exception):
+    pass
+
 
 def set_connection(host=None, database=None, user=None, password=None):
     """Set connection parameters. Call set_connection with no arguments to clear."""
@@ -64,7 +67,7 @@ def set_calculation(blacklist=None, exceptions=None, max=float('inf'), share_fee
 
 
 def set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=None, timestamp_brackets=None,
-               min_payout_daily=1, min_payout_weekly=0, min_payout_monthly=0, day_weekly_payout=5, day_monthly_payout=10,
+               min_payout_daily=0, min_payout_weekly=0, min_payout_monthly=0, day_weekly_payout=5, day_monthly_payout=10,
                payoutsender_test=True, sender_exception=None):
 
     if not share_percentage_exceptions:
@@ -90,10 +93,11 @@ def set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=No
 class DbConnection:
     def __init__(self):
         try:
-            self._conn = psycopg2.connect(host=c.CONNECTION['HOST'],
-                                          database=c.CONNECTION['DATABASE'],
-                                          user=c.CONNECTION['USER'],
-                                          password=c.CONNECTION['PASSWORD'])
+            self._conn = psycopg2.connect(
+                host=c.CONNECTION['HOST'],
+                database=c.CONNECTION['DATABASE'],
+                user=c.CONNECTION['USER'],
+                password=c.CONNECTION['PASSWORD'])
         except Exception as e:
             logger.exception('failed to connect to ark-node: {}'.format(e))
             raise e
@@ -142,12 +146,14 @@ class Blockchain():
             logger.fatal(
                 'Could not get a result through api for {0}, with redundancy: {1}'.format(function, redundancy)
             )
+            raise ApiError
         return max(height)
 
 
 class Node:
     @staticmethod
     def height():
+        res = None
         try:
             cursor = DbCursor()
             res = cursor.execute_and_fetchone("""
@@ -157,11 +163,10 @@ class Node:
         except Exception as e:
             logger.exception(e)
             pass
-        else:
-            if not res:
-                logger.fatal('Received an empty from the ark-db')
-                raise NodeDbError
-
+        if not res:
+            logger.fatal('failed to receive a response from the ark-node')
+            raise NodeDbError
+        return res
 
     @staticmethod
     def check_node(max_difference):
@@ -175,13 +180,17 @@ class Node:
         # Fetch the max timestamp as it occurs in table blocks, or return
         # a previously cached value.
         cursor = DbCursor()
+        try:
+            r = cursor.execute_and_fetchone("""
+                    SELECT max(timestamp) 
+                    FROM blocks
+            """)[0]
+        except Exception as e:
+            logger.exception(e)
+            raise NodeDbError
 
-        r = cursor.execute_and_fetchone("""
-                SELECT max(timestamp) 
-                FROM blocks
-        """)[0]
         if not r:
-            logger.fatal('failed to get max timestamp from node')
+            logger.fatal('failed to get max timestamp from node. {}'.format(cursor))
             raise NodeDbError
         return r
 
@@ -228,7 +237,7 @@ class Address:
     @staticmethod
     def votes(address):
         """Returns a map all votes made by an address, {(+/-)pubkeydelegate:timestamp}"""
-
+        #todo figure out why this returns a map, and not a list of namedtuples
         cursor = DbCursor()
         qry = cursor.execute_and_fetchall("""
            SELECT votes."votes", transactions."timestamp"
@@ -236,9 +245,25 @@ class Address:
            WHERE transactions."id" = votes."transactionId"
            AND transactions."recipientId" = '{}'
         """.format(address))
-        res = {}
+
+        Vote = namedtuple(
+            'vote',
+            'direction delegate timestamp')
+        res = []
         for i in qry:
-            res.update({i[0]: i[1]})
+            if i[0][0] == '+':
+                direction = True
+            elif i[0][0] == '-':
+                direction = False
+            else:
+                logger.fatal('failed to interpret direction for: {}'.format(i))
+                raise ParseError
+            vote = Vote(
+                direction=direction,
+                delegate=i[0][1:],
+                timestamp=i[1],
+            )
+            res.append(vote)
         return res
 
     @staticmethod
@@ -318,6 +343,7 @@ class Delegate:
                        AND transactions."id" {1}
                        GROUP BY transactions."recipientId") maxresults
                     WHERE ts."recipientId" = maxresults."recipientId"
+                    AND ts."recipientId" {1}
                     AND ts."timestamp"= maxresults.max_timestamp;
 
                     """.format(delegate_address, command_blacklist))
@@ -325,7 +351,7 @@ class Delegate:
 
         Payout = namedtuple(
             'payout',
-            'address  id timestamp')
+            'address id timestamp')
 
         for i in qry:
             payout = Payout(
@@ -401,7 +427,7 @@ class Delegate:
     def blocks(delegate_pubkey=None, max_timestamp=None):
         """returns a list of named tuples of all blocks forged by a delegate.
         if delegate_pubkey is not specified, set_delegate needs to be called in advance.
-        max_timestamp can be configured o retrieve blocks up to a certain timestamp."""
+        max_timestamp can be configured to retrieve blocks up to a certain timestamp."""
 
         if not delegate_pubkey:
             delegate_pubkey = c.DELEGATE['PUBKEY']
@@ -434,7 +460,7 @@ class Delegate:
         return block_list
 
     @staticmethod
-    def share(passphrase=None, last_payout=None, start_block=0):
+    def share(passphrase=None, last_payout=None, start_block=0, del_pubkey=None, del_address=None):
         """Calculate the true blockweight payout share for a given delegate,
         assuming no exceptions were made for a voter. last_payout is a map of addresses and timestamps:
         {address: timestamp}. If no argument are given, it will start the calculation at the first forged block
@@ -454,6 +480,9 @@ class Delegate:
 
             delegate_pubkey = delegate_keys.public
             delegate_address = core.getAddress(keys=delegate_keys)
+        elif del_pubkey and del_address:
+            delegate_pubkey = del_pubkey
+            delegate_address = del_address
         else:
             delegate_pubkey = c.DELEGATE['PUBKEY']
             delegate_address = c.DELEGATE['ADDRESS']
@@ -522,7 +551,8 @@ class Delegate:
             raise Exception
 
         # get all forged blocks of delegate:
-        blocks = Delegate.blocks(max_timestamp=max_timestamp)
+        blocks = Delegate.blocks(max_timestamp=max_timestamp,
+                                 delegate_pubkey=delegate_pubkey)
 
         block_nr = start_block
         chunk_dict = {}
@@ -609,6 +639,7 @@ class Core:
     def send(address, amount, smartbridge=None, network='ark', secret=c.DELEGATE['SECRET']):
         if c.SENDER_SETTINGS['PAYOUTSENDER_TEST']:
             logger.debug('Transaction test send to {0} for amount: {1} with smartbridge: {2}'.format(address, amount, smartbridge))
+            return True
         api.use(network)
         tx = core.Transaction(amount=amount,
                               recipientId=address,
@@ -626,7 +657,7 @@ class Core:
         raise ApiError
 
     @staticmethod
-    def payoutsender(data, frq_dict, calculation_timestamp=None):
+    def payoutsender(data, frq_dict=None, calculation_timestamp=None):
         # data[0] is always the address.
         # data[1] is a map having keys
         #         last_payout, status, share and vote_timestamp.
@@ -638,7 +669,7 @@ class Core:
         day_week = datetime.datetime.today().weekday()
 
         address = data[0]
-        amount = 0
+
         frequency = 2
         if c.SENDER_SETTINGS['COVER_FEES']:
             fees = 0
@@ -646,6 +677,10 @@ class Core:
         else:
             fees = c.TX_FEE
             del_fees = 0
+
+        # set standard amount
+        print(c.SENDER_SETTINGS['COVER_FEES'])
+        amount = data[1]['share'] * c.SENDER_SETTINGS['DEFAULT_SHARE'] - fees
 
         # set frequency according to frequency argument
         try:
@@ -655,7 +690,7 @@ class Core:
 
         try:
             for i in c.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
-                if data[1]['VOTE_TIMESTAMP'] < i:
+                if data[1]['vote_timestamp'] < i:
                     amount = ((data[1]['share'] * c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i]) - fees)
         except Exception:
             pass
@@ -680,19 +715,19 @@ class Core:
         delegate_share = data[1]['share'] - (amount + del_fees)
 
         if frequency == 1:
-            if data[1]['LAST_PAYOUT'] < calculation_timestamp - c.DAY_SEC - c.HOUR_SEC:
+            if data[1]['last_payout'] < calculation_timestamp - c.DAY_SEC - c.HOUR_SEC:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_DAILY']:
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
 
         elif frequency == 2 and day_week == c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT']:
-            if data[1]['LAST_PAYOUT'] < calculation_timestamp - c.WEEK_SEC - c.HOUR_SEC:
+            if data[1]['last_payout'] < calculation_timestamp - c.WEEK_SEC - c.HOUR_SEC:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY']:
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
 
         elif frequency == 3 and day_month == c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT']:
-            if data[1]['LAST_PAYOUT'] < calculation_timestamp - c.MONTH_SEC - c.WEEK_SEC:
+            if data[1]['last_payout'] < calculation_timestamp - c.MONTH_SEC - c.WEEK_SEC:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY']:
                     result = Core.send(address, amount)
                     return result, delegate_share, amount

@@ -1,13 +1,9 @@
 from unittest import TestCase
-from unittest.mock import Mock, patch
+"""This is not a real unit test, as it relies on the api to be properly working"""
 
 
 class TestBlockchain(TestCase):
-    # rather lazy test, but it does the trick for our purposes
     def test_height(self):
-        import arkdbtools as at
-
-        # use a single function call to speed up test
-        res = at.Blockchain.height()
-        self.assertIsInstance(res, int)
-        self.assertGreater(res, 2379409)
+        from arkdbtools.dbtools import Blockchain
+        height = Blockchain.height()
+        self.assertIsInstance(height, int)
