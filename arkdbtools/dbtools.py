@@ -473,6 +473,7 @@ class Delegate:
         logger.info('starting share calculation using settings:\\ {0}\\ {1}'.format(c.DELEGATE, c.CALCULATION_SETTINGS))
         cursor = DbCursor()
 
+        # todo: this code is a bit of a mess and should really be refactored into smaller, testable chunks
         if passphrase:
             delegate_keys = core.getKeys(secret=passphrase,
                                          network='ark',
@@ -499,7 +500,6 @@ class Delegate:
 
         votes = Delegate.votes(delegate_pubkey)
 
-
         # create a map of voters
         voter_dict = {}
         for voter in votes:
@@ -523,8 +523,9 @@ class Delegate:
                     logger.info('delegate {} has not forged any blocks'.format(i))
                     pass
         try:
-            for i in c.CALCULATION_SETTINGS['blacklist']:
+            for i in c.CALCULATION_SETTINGS['BLACKLIST']:
                 voter_dict.pop(i)
+                print('popped {}'.format(i))
                 logger.debug('popped {} from calculations'.format(i))
         except Exception:
             pass
@@ -571,14 +572,19 @@ class Delegate:
                     balance = voter_dict[i]['balance']
                     if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['MAX']:
                         balance = c.CALCULATION_SETTINGS['MAX']
+
                     if i in c.CALCULATION_SETTINGS['EXCEPTIONS']:
-                        balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]
+                        if balance > c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']:
+                            balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']
+
 
                     if voter_dict[i]['blocks_forged']:
                         for x in voter_dict[i]['blocks_forged']:
                             if x.timestamp < blocks[block_nr].timestamp:
                                 voter_dict[i]['balance'] += (x.reward + x.totalFee)
                                 voter_dict[i]['blocks_forged'].remove(x)
+                        balance = voter_dict[i]['balance']
+
                     if voter_dict[i]['status']:
                         if not voter_dict[i]['balance'] < 0:
                             poolbalance += balance
@@ -592,7 +598,8 @@ class Delegate:
                     if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['MAX']:
                         balance = c.CALCULATION_SETTINGS['MAX']
                     if i in c.CALCULATION_SETTINGS['EXCEPTIONS']:
-                        balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]
+                        if balance > c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']:
+                            balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']
 
                     if voter_dict[i]['status'] and voter_dict[i]['last_payout'] < blocks[block_nr].timestamp:
                         if c.CALCULATION_SETTINGS['SHARE_FEES']:
@@ -672,32 +679,36 @@ class Core:
 
         frequency = 2
         if c.SENDER_SETTINGS['COVER_FEES']:
-            fees = 0
-            del_fees = c.TX_FEE
-        else:
             fees = c.TX_FEE
-            del_fees = 0
+        else:
+            fees = 0
+
 
         # set standard amount
-        print(c.SENDER_SETTINGS['COVER_FEES'])
-        amount = data[1]['share'] * c.SENDER_SETTINGS['DEFAULT_SHARE'] - fees
+        # if the delegate covers the fees, it is added to the amount to be sent, since it is automatically substracted
+        # by the send functions
+        amount = data[1]['share'] * c.SENDER_SETTINGS['DEFAULT_SHARE'] + fees
 
         # set frequency according to frequency argument
         try:
             frequency = frq_dict[address]
+            if frequency not in [1,2,3]:
+                logger.fatal('supplied frequencydict contained an invalid frequency. Address: {0}, frequency: {1}'.format(address, frequency))
+                raise AllocationError
         except Exception:
             pass
 
         try:
             for i in c.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
                 if data[1]['vote_timestamp'] < i:
-                    amount = ((data[1]['share'] * c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i]) - fees)
+                    amount = ((data[1]['share'] * c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i]) + fees)
         except Exception:
             pass
 
         # set amount according to SHARE_PERCENTAGE_EXCEPTIONS
         try:
-            amount = ((data[1]['share'] * c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS']) - fees)
+            print(c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'])
+            amount = ((data[1]['share'] * c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'][address]) + fees)
         except Exception:
             pass
 
@@ -712,7 +723,7 @@ class Core:
             pass
 
         # set delegate share
-        delegate_share = data[1]['share'] - (amount + del_fees)
+        delegate_share = data[1]['share'] - amount
 
         if frequency == 1:
             if data[1]['last_payout'] < calculation_timestamp - c.DAY_SEC - c.HOUR_SEC:
@@ -734,3 +745,4 @@ class Core:
         logger.debug('tx did not pass the required parameters for sending (should happen often) : {}'.format(data))
         raise TxParameterError
 
+# don't use the Calculation and State class yet, that is going to be part of arkdbtools v2.0.0

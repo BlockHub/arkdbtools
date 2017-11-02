@@ -29,7 +29,7 @@ TX_FEE = 10000000
 
 CALCULATION_SETTINGS = {
     'BLACKLIST': [],
-    'EXCEPTIONS': {'address': {'replace': 'int else None'}},
+    'EXCEPTIONS': {'address': {'REPLACE': 'int else None'}},
     'MAX': float('inf'),
     'SHARE_FEES': False,
 }
@@ -37,9 +37,7 @@ CALCULATION_SETTINGS = {
 SENDER_SETTINGS = {
     'DEFAULT_SHARE': 0.95,
     'COVER_FEES': False,
-    'SHARE_PERCENTAGE_EXCEPTIONS': {
-        'address': 0.8,
-        },
+    'SHARE_PERCENTAGE_EXCEPTIONS': None,
     'TIMESTAMP_BRACKETS': {
          float('inf'): 0.95,
          16247647    : 0.96
