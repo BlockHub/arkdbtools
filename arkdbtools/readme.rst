@@ -196,4 +196,5 @@ arkdbtools user a logger
     'FORMAT': '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 }
 
-to disable the logger, manually edit config.py and set 'USE' to False.
+to disable the logger, manually edit config.py and set 'USE' to False. The logger uses a RotatingFileHandler, so your disk won't
+fill up. (there should be no need to disable it)
