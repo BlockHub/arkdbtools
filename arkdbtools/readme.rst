@@ -21,7 +21,9 @@ https://www.digitalocean.com/community/tutorials/initial-server-setup-with-ubunt
 Now download the ark-node. I recommend using the Ark-commander script to install and run it:
 
     cd
+
     wget https://ark.io/ARKcommander.sh
+
     bash ARKcommander.sh
 
 After installing and rebooting, create a new psql user:
@@ -31,7 +33,7 @@ After installing and rebooting, create a new psql user:
 You can add a password for security reasons, this is not necessary if you run query through localhost, but a must if you are querying over the internet.
 Replace everything between <> with your user and password (erase <> as well )
 
-     $sudo -u postgres psql
+      $sudo -u postgres psql
       psql=# ALTER USER <username> WITH ENCRYPTED PASSWORD '<password>';
 
 Next we give the user SELECT only privilege. This ensures you don't mess with the ark-database, which would
@@ -67,6 +69,7 @@ Customizing calculations
 
 Calculation settings
     arkdbtools contains a config.py file where different settings influence Delegate.share() flow controls.
+
     >>> CALCULATION SETTINGS{...}
 
     are performed at the calculation level. Capitalized keys need to remain capitalized.
@@ -92,21 +95,21 @@ Share fees
     A delegate receives both a block reward (2 Ark per block) and transaction fees. Set share_fees to True if you
     wish to share these fees as well. In my experience the average weekly fees for a delegate are +30 Ark.
 
-    >>> 'share_fees': False,
+    >>> 'SHARE_FEES': False,
 
 
 You can modify these settings using:
 
-    >>>set_calculation(blacklist, exceptions, max_amount, share_fees)
+    >>> set_calculation(blacklist, exceptions, max_amount, share_fees)
 
-    This will make sure that these settings are only used in the namespace of the module
+This will make sure that these settings are only used in the namespace of the module
 
 Core
 ----
 
 Sending transactions
     dbtools also contains a Core class, which uses Arky to send transactions.
-    This function will make 5 attempts to send a transaction before raising an ApiError. Smartbridge takes a string as argumen.
+    This function will make 5 attempts to send a transaction before raising an ApiError. Smartbridge takes a string as argument.
 
     >>> arkdbtools.dbtools.Core.send(address, amount, smartbridge)
 
@@ -119,9 +122,9 @@ Payoutsender
     >>> arkdbtools.dbtools.Core.payoutsender(data, frq_dct, calculation_timestamp)
 
     Payoutsender returns 3 values as a tuple:
-        1.) the result of send function, which is the api response (if the transaction was a success)
-        2.) the delegate_share, which is the part that should go to the rewardswallet of the delegate.
-        3.) the amount sent to the voter.
+        1. the result of send function, which is the api response (if the transaction was a success)
+        2. the delegate_share, which is the part that should go to the rewardswallet of the delegate.
+        3. the amount sent to the voter.
 
     if a transaction did not pass the parameters of payoutsender (for example the amount was below the minimum payout amount),
     payoutsender raises a TxParameterError
@@ -132,8 +135,8 @@ Payoutsender
 Setting the sender is also quite easy.
 
     >>> dbtools.set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=None, timestamp_brackets=None,
-    >>>                    min_payout_daily=1, min_payout_weekly=0, min_payout_monthly=0, day_weekly_payout=0, day_monthly_payout=10,
-    >>>                    payoutsender_test=True, sender_exception=None)
+                           min_payout_daily=1, min_payout_weekly=0, min_payout_monthly=0, day_weekly_payout=0, day_monthly_payout=10,
+                           payoutsender_test=True, sender_exception=None)
 
 
 share_percentage_exceptions
@@ -161,13 +164,17 @@ sender_exception
 
 The order of operations of all of these settings is as follows:
 
-    *.) sender_exceptions are executed or throw an error.
-    *.) share_percentage_exceptions go above all others, except for sender_exceptions.
-    *.) timestamp_brackets are used for all voters, unless they are also in share_percentage_exceptions.
-    *.) default_share is used if none of the above apply.
+    - sender_exceptions are executed or throw an error.
+    - share_percentage_exceptions go above all others, except for sender_exceptions.
+    - timestamp_brackets are used for all voters, unless they are also in share_percentage_exceptions.
+    - default_share is used if none of the above apply.
 
-Cover_fees has one catch, you need to have a sufficient balance from your delegateshare to cover them, else
-your balance will run out while transmitting the transactions. An ApiError would then be raised.
+Cover_fees
+    Cover_fees has one catch, you need to have a sufficient balance from your delegateshare to cover them, else
+    your balance will run out while transmitting the transactions. An ApiError would then be raised.
+
+Payoutsender_test
+    if set to true, instead of sending the transactions, the send function returns True. Use this when setting up your payoutscript
 
 
 
