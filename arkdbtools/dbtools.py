@@ -237,7 +237,6 @@ class Address:
     @staticmethod
     def votes(address):
         """Returns a map all votes made by an address, {(+/-)pubkeydelegate:timestamp}"""
-        #todo figure out why this returns a map, and not a list of namedtuples
         cursor = DbCursor()
         qry = cursor.execute_and_fetchall("""
            SELECT votes."votes", transactions."timestamp"
@@ -494,7 +493,7 @@ class Delegate:
         logger.info('Share calculation max_timestamp = {}'.format(max_timestamp))
 
         # utils function
-        transactions = utils.get_transactionlist(
+        transactions = get_transactionlist(
                             delegate_pubkey=delegate_pubkey
         )
 
@@ -503,12 +502,14 @@ class Delegate:
         # create a map of voters
         voter_dict = {}
         for voter in votes:
-            voter_dict.update({voter.address: {'balance': 0.0,
-                                               'status': False,
-                                               'last_payout': voter.timestamp,
-                                               'share': 0.0,
-                                               'vote_timestamp': voter.timestamp,
-                                               'blocks_forged': []}})
+            voter_dict.update({voter.address: {
+                'balance': 0.0,
+                'status': False,
+                'last_payout': voter.timestamp,
+                'share': 0.0,
+                'vote_timestamp': voter.timestamp,
+                'blocks_forged': []}
+            })
 
         # check if a voter is/used to be a forging delegate
         delegates = Delegate.delegates()
@@ -744,3 +745,47 @@ class Core:
         logger.debug('tx did not pass the required parameters for sending (should happen often) : {0}'.format(data))
         raise TxParameterError('tx did not pass the required parameters for sending (should happen often) : {0}'.format(data))
 
+
+def get_transactionlist(delegate_pubkey):
+    """returns a list of named tuples of all transactions relevant to a specific delegates voters.
+    Flow: finds all voters and unvoters, SELECTs all transactions of those voters, names all transactions according to
+    the scheme: 'transaction', 'id amount timestamp recipientId senderId rawasset type fee blockId'"""
+    cursor = DbCursor()
+
+    res = cursor.execute_and_fetchall("""
+        SELECT transactions."id", transactions."amount",
+               transactions."timestamp", transactions."recipientId",
+               transactions."senderId", transactions."rawasset",
+               transactions."type", transactions."fee", transactions."blockId"
+        FROM transactions
+        WHERE transactions."senderId" IN
+          (SELECT transactions."recipientId"
+           FROM transactions, votes
+           WHERE transactions."id" = votes."transactionId"
+           AND votes."votes" = '+{0}')
+        OR transactions."recipientId" IN
+          (SELECT transactions."recipientId"
+           FROM transactions, votes
+           WHERE transactions."id" = votes."transactionId"
+           AND votes."votes" = '+{0}')
+        ORDER BY transactions."timestamp" ASC;""".format(delegate_pubkey))
+
+    Transaction = namedtuple(
+        'transaction',
+        'id amount timestamp recipientId senderId rawasset type fee')
+    named_transactions = []
+
+    for i in res:
+        tx_id = Transaction(
+            id=i[0],
+            amount=i[1],
+            timestamp=i[2],
+            recipientId=i[3],
+            senderId=i[4],
+            rawasset=i[5],
+            type=i[6],
+            fee=i[7],
+                            )
+
+        named_transactions.append(tx_id)
+    return named_transactions

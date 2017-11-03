@@ -35,7 +35,7 @@ CALCULATION_SETTINGS = {
 }
 
 SENDER_SETTINGS = {
-    'DEFAULT_SHARE': 0.95,
+    'DEFAULT_SHARE': 0,
     'COVER_FEES': False,
     'SHARE_PERCENTAGE_EXCEPTIONS': None,
     'TIMESTAMP_BRACKETS': None,
@@ -45,14 +45,13 @@ SENDER_SETTINGS = {
     # keep accruing a small balance
     'MIN_PAYOUT_MONTHLY': 0,
     # 0 is monday. 6 is sunday
-    'DAY_WEEKLY_PAYOUT': 5,
-    'DAY_MONTHLY_PAYOUT': 24,
+    'DAY_WEEKLY_PAYOUT': 0,
+    'DAY_MONTHLY_PAYOUT': 0,
     'PAYOUTSENDER_TEST': True,
     'SENDER_EXCEPTIONS': None,
-    'WAIT_TIME_DAY': DAY_SEC - 5 * HOUR_SEC,
-    'WAIT_TIME_WEEK': DAY_SEC - 5 * HOUR_SEC,
-    'WAIT_TIME_MONTH': DAY_SEC - 5 * HOUR_SEC,
-
+    'WAIT_TIME_DAY': None,
+    'WAIT_TIME_WEEK': None,
+    'WAIT_TIME_MONTH': None,
 }
 
 
