@@ -183,4 +183,17 @@ Payoutsender_test
     if set to true, instead of sending the transactions, the send function returns True. Use this when setting up your payoutscript
 
 
+arkdbtools user a logger
 
+>>> LOGGING = {
+    'USE': True,
+    'LEVEL': logging.WARNING,
+    'HANDLER': logging.handlers.RotatingFileHandler('/tmp/arkdbtools.log',
+                                                    encoding='utf-8',
+                                                    maxBytes=10*1024*1024,
+                                                    backupCount=5),
+
+    'FORMAT': '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
+}
+
+to disable the logger, manually edit config.py and set 'USE' to False.
