@@ -23,7 +23,7 @@ class TestSet_calculation(TestCase):
         set_calculation(
             blacklist=  '1',
             exceptions= '2',
-            max=        '3',
+            max_amount=        '3',
             share_fees= '4',)
         self.assertCountEqual(c.CALCULATION_SETTINGS, resultset)
 

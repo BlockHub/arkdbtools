@@ -1,12 +1,12 @@
 import psycopg2
 from arky import api, core
-import arkdbtools.utils as utils
-import arkdbtools.share_calculator as sc
+from arkdbtools import utils
 import arkdbtools.config as c
 from collections import namedtuple
 import binascii
 import datetime
 import logging
+
 
 if c.LOGGING['USE']:
     logger = logging.getLogger(__name__)
@@ -19,9 +19,12 @@ else:
     logger = logging.getLogger(__name__)
     logger.propagate = False
 
+class InputError(Exception):
+    pass
 
 class AllocationError(Exception):
     pass
+
 
 class TxParameterError(Exception):
     pass
@@ -56,28 +59,21 @@ def set_delegate(address=None, pubkey=None, secret=None):
     c.DELEGATE['SECRET'] = secret
 
 
-def set_calculation(blacklist=None, exceptions=None, max=float('inf'), share_fees=False ):
+def set_calculation(blacklist=None, exceptions=None, max_amount=float('inf'), share_fees=False ):
     if not exceptions:
         exceptions = {'address': {'replace': 'int else None'}}
 
     c.CALCULATION_SETTINGS['BLACKLIST'] = blacklist
     c.CALCULATION_SETTINGS['EXCEPTIONS'] = exceptions
-    c.CALCULATION_SETTINGS['MAX'] = max
+    c.CALCULATION_SETTINGS['MAX'] = max_amount
     c.CALCULATION_SETTINGS['SHARE_FEES'] = share_fees
 
 
 def set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=None, timestamp_brackets=None,
                min_payout_daily=0, min_payout_weekly=0, min_payout_monthly=0, day_weekly_payout=5, day_monthly_payout=10,
-               payoutsender_test=True, sender_exception=None):
+               payoutsender_test=True, sender_exception=None, wait_time_day=0, wait_time_week=0, wait_time_month=0):
 
-    if not share_percentage_exceptions:
-        share_percentage_exceptions = {
-            'address': 0.8,
-        }
 
-    if not sender_exception:
-        sender_exception = {'address': {'frequency': 3,
-                                         'amount': 50 * c.ARK}}
     c.SENDER_SETTINGS['DEFAULT_SHARE'] = default_share
     c.SENDER_SETTINGS['COVER_FEES'] = cover_fees
     c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'] = share_percentage_exceptions
@@ -88,7 +84,11 @@ def set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=No
     c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT'] = day_weekly_payout
     c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT'] = day_monthly_payout
     c.SENDER_SETTINGS['PAYOUTSENDER_TEST'] = payoutsender_test
-    c.SENDER_SETTINGS['SENDER_EXCEPTION'] = sender_exception
+    c.SENDER_SETTINGS['SENDER_EXCEPTIONS'] = sender_exception
+    c.SENDER_SETTINGS['WAIT_TIME_DAY'] = wait_time_day
+    c.SENDER_SETTINGS['WAIT_TIME_WEEK'] = wait_time_week
+    c.SENDER_SETTINGS['WAIT_TIME_MONTH'] = wait_time_month
+
 
 class DbConnection:
     def __init__(self):
@@ -146,7 +146,8 @@ class Blockchain():
             logger.fatal(
                 'Could not get a result through api for {0}, with redundancy: {1}'.format(function, redundancy)
             )
-            raise ApiError
+            raise ApiError('Could not get a result through api for {0}, with redundancy: {1}'.format(function, redundancy))
+
         return max(height)
 
 
@@ -165,7 +166,7 @@ class Node:
             pass
         if not res:
             logger.fatal('failed to receive a response from the ark-node')
-            raise NodeDbError
+            raise NodeDbError('failed to receive a response from the ark-node')
         return res
 
     @staticmethod
@@ -187,11 +188,11 @@ class Node:
             """)[0]
         except Exception as e:
             logger.exception(e)
-            raise NodeDbError
+            raise NodeDbError('failed to receive a response from the ark-node: {}'.format(e))
 
         if not r:
             logger.fatal('failed to get max timestamp from node. {}'.format(cursor))
-            raise NodeDbError
+            raise NodeDbError('failed to get max timestamp from node.')
         return r
 
 
@@ -231,7 +232,6 @@ class Address:
                 )
 
             named_transactions.append(tx_id)
-
         return named_transactions
 
     @staticmethod
@@ -257,7 +257,7 @@ class Address:
                 direction = False
             else:
                 logger.fatal('failed to interpret direction for: {}'.format(i))
-                raise ParseError
+                raise ParseError('failed to interpret direction of vote for: {}'.format(i))
             vote = Vote(
                 direction=direction,
                 delegate=i[0][1:],
@@ -287,7 +287,7 @@ class Address:
         if balance < 0:
             height = Node.height()
             logger.fatal('Negative balance for address {0}, Nodeheight: {1)'.format(address, height))
-            raise NegativeBalanceError
+            raise NegativeBalanceError('Negative balance for address {0}, Nodeheight: {1)'.format(address, height))
         return balance
 
 
@@ -494,9 +494,9 @@ class Delegate:
         logger.info('Share calculation max_timestamp = {}'.format(max_timestamp))
 
         # utils function
-        transactions = sc.get_transactionlist(
-                            cursor=cursor,
-                            pubkey=delegate_pubkey)
+        transactions = utils.get_transactionlist(
+                            delegate_pubkey=delegate_pubkey
+        )
 
         votes = Delegate.votes(delegate_pubkey)
 
@@ -525,7 +525,6 @@ class Delegate:
         try:
             for i in c.CALCULATION_SETTINGS['BLACKLIST']:
                 voter_dict.pop(i)
-                print('popped {}'.format(i))
                 logger.debug('popped {} from calculations'.format(i))
         except Exception:
             pass
@@ -548,8 +547,8 @@ class Delegate:
                 except Exception:
                     pass
         else:
-            logger.fatal('last_payout object not recognised by program: {}'.format(type(last_payout)))
-            raise Exception
+            logger.fatal('last_payout object not recognised: {}'.format(type(last_payout)))
+            raise InputError('last_payout object not recognised: {}'.format(type(last_payout)))
 
         # get all forged blocks of delegate:
         blocks = Delegate.blocks(max_timestamp=max_timestamp,
@@ -577,7 +576,6 @@ class Delegate:
                         if balance > c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']:
                             balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']
 
-
                     if voter_dict[i]['blocks_forged']:
                         for x in voter_dict[i]['blocks_forged']:
                             if x.timestamp < blocks[block_nr].timestamp:
@@ -590,7 +588,7 @@ class Delegate:
                             poolbalance += balance
                         else:
                             logger.fatal('balance lower than zero for: {0}'.format(i))
-                            raise NegativeBalanceError
+                            raise NegativeBalanceError('balance lower than zero for: {0}'.format(i))
 
                 for i in voter_dict:
                     balance = voter_dict[i]['balance']
@@ -658,10 +656,10 @@ class Core:
             logger.debug(result)
             if result['success']:
                 logger.debug(result)
-                return True
+                return result
 
         logger.fatal('failed to send transaction 5 times, response: {}'.format(result))
-        raise ApiError
+        raise ApiError('failed to send transaction 5 times, response: {}'.format(result))
 
     @staticmethod
     def payoutsender(data, frq_dict=None, calculation_timestamp=None):
@@ -694,7 +692,7 @@ class Core:
             frequency = frq_dict[address]
             if frequency not in [1,2,3]:
                 logger.fatal('supplied frequencydict contained an invalid frequency. Address: {0}, frequency: {1}'.format(address, frequency))
-                raise AllocationError
+                raise AllocationError('supplied frequencydict contained an invalid frequency. Address: {0}, frequency: {1}'.format(address, frequency))
         except Exception:
             pass
 
@@ -707,42 +705,42 @@ class Core:
 
         # set amount according to SHARE_PERCENTAGE_EXCEPTIONS
         try:
-            print(c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'])
             amount = ((data[1]['share'] * c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'][address]) + fees)
         except Exception:
             pass
 
         # set amount according to SENDER_EXCEPTIONS
         try:
-            amount = c.SENDER_SETTINGS['SENDER_EXCEPTIONS'][address]['amount']
-            frequency = c.SENDER_SETTINGS['SENDER_EXCEPTIONS'][address]['amount']
-            if amount > data[1]['share'] or frequency not in [1, 2, 3]:
-                logger.fatal('Amount allocated to {0} was greater than the trueblockweight allocation, or frequency: {1} was not incorrect'.format(address, frequency))
-                raise AllocationError
+            amount = c.SENDER_SETTINGS['SENDER_EXCEPTIONS'][address]['AMOUNT']
+            frequency = c.SENDER_SETTINGS['SENDER_EXCEPTIONS'][address]['FREQUENCY']
         except Exception:
             pass
+
+        if amount > data[1]['share'] or frequency not in [1, 2, 3]:
+            logger.fatal('Amount allocated to {0} was greater than the trueblockweight allocation, or frequency: {1} was not in in [1,2,3]. Check your configuration for SENDER_EXCEPTIONS'.format(address, frequency))
+            raise AllocationError('Amount allocated to {0} was greater than the trueblockweight allocation, or frequency: {1} was not in in [1,2,3]. Amount: {2} Trueweightallocation: {3} Check your configuration for SENDER_EXCEPTIONS'.format(address, frequency, amount, data[1]['share']))
 
         # set delegate share
         delegate_share = data[1]['share'] - amount
 
+
         if frequency == 1:
-            if data[1]['last_payout'] < calculation_timestamp - c.DAY_SEC - c.HOUR_SEC:
+            if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_DAY']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_DAILY']:
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
 
         elif frequency == 2 and day_week == c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT']:
-            if data[1]['last_payout'] < calculation_timestamp - c.WEEK_SEC - c.HOUR_SEC:
+            if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_WEEK']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY']:
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
 
         elif frequency == 3 and day_month == c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT']:
-            if data[1]['last_payout'] < calculation_timestamp - c.MONTH_SEC - c.WEEK_SEC:
+            if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_MONTH']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY']:
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
-        logger.debug('tx did not pass the required parameters for sending (should happen often) : {}'.format(data))
-        raise TxParameterError
+        logger.debug('tx did not pass the required parameters for sending (should happen often) : {0}'.format(data))
+        raise TxParameterError('tx did not pass the required parameters for sending (should happen often) : {0}'.format(data))
 
-# don't use the Calculation and State class yet, that is going to be part of arkdbtools v2.0.0

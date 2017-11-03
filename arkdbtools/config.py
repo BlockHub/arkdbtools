@@ -28,8 +28,8 @@ ARK = 100000000
 TX_FEE = 10000000
 
 CALCULATION_SETTINGS = {
-    'BLACKLIST': [],
-    'EXCEPTIONS': {'address': {'REPLACE': 'int else None'}},
+    'BLACKLIST': None,
+    'EXCEPTIONS': None,
     'MAX': float('inf'),
     'SHARE_FEES': False,
 }
@@ -38,28 +38,27 @@ SENDER_SETTINGS = {
     'DEFAULT_SHARE': 0.95,
     'COVER_FEES': False,
     'SHARE_PERCENTAGE_EXCEPTIONS': None,
-    'TIMESTAMP_BRACKETS': {
-         float('inf'): 0.95,
-         16247647    : 0.96
-         },
-    'MIN_PAYOUT_DAILY': 2 * ARK,
-    'MIN_PAYOUT_WEEKLY': 0.1 * ARK,
+    'TIMESTAMP_BRACKETS': None,
+    'MIN_PAYOUT_DAILY': 0,
+    'MIN_PAYOUT_WEEKLY': 0,
     # don't put this at 0, because wallets abandoned wallets will
     # keep accruing a small balance
-    'MIN_PAYOUT_MONTHLY': 0.0001 * ARK,
+    'MIN_PAYOUT_MONTHLY': 0,
     # 0 is monday. 6 is sunday
     'DAY_WEEKLY_PAYOUT': 5,
     'DAY_MONTHLY_PAYOUT': 24,
     'PAYOUTSENDER_TEST': True,
-    'SENDER_EXCEPTION': {'address': {'frequency':   3,
-                                     'amount':      50*ARK}
-                         }
+    'SENDER_EXCEPTIONS': None,
+    'WAIT_TIME_DAY': DAY_SEC - 5 * HOUR_SEC,
+    'WAIT_TIME_WEEK': DAY_SEC - 5 * HOUR_SEC,
+    'WAIT_TIME_MONTH': DAY_SEC - 5 * HOUR_SEC,
+
 }
 
 
 LOGGING = {
     'USE': True,
-    'LEVEL': logging.DEBUG,
+    'LEVEL': logging.WARNING,
     'HANDLER': logging.handlers.RotatingFileHandler('/tmp/arkdbtools.log',
                                                     encoding='utf-8',
                                                     maxBytes=10*1024*1024,
