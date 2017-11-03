@@ -192,7 +192,6 @@ arkdbtools user a logger
                                                     encoding='utf-8',
                                                     maxBytes=10*1024*1024,
                                                     backupCount=5),
-
     'FORMAT': '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 }
 
