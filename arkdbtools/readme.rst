@@ -164,10 +164,10 @@ sender_exception
 
 The order of operations of all of these settings is as follows:
 
-    - sender_exceptions are executed or throw an error.
-    - share_percentage_exceptions go above all others, except for sender_exceptions.
-    - timestamp_brackets are used for all voters, unless they are also in share_percentage_exceptions.
-    - default_share is used if none of the above apply.
+- sender_exceptions are executed or throw an error.
+- share_percentage_exceptions go above all others, except for sender_exceptions.
+- timestamp_brackets are used for all voters, unless they are also in share_percentage_exceptions.
+- default_share is used if none of the above apply.
 
 Cover_fees
     Cover_fees has one catch, you need to have a sufficient balance from your delegateshare to cover them, else
