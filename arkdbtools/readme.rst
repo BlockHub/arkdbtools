@@ -69,10 +69,10 @@ Customizing calculations
 
 Calculation settings
     arkdbtools contains a config.py file where different settings influence Delegate.share() flow controls.
+    These options are performed at the calculation level. Capitalized keys need to remain capitalized throughout every setting.
 
 >>> CALCULATION SETTINGS{...}
 
-    are performed at the calculation level. Capitalized keys need to remain capitalized.
 
 Blacklisting voters
     The option blacklist completely removes an address from the calculation. The share is evenly divided over all voters.
@@ -126,8 +126,13 @@ Payoutsender
         2. the delegate_share, which is the part that should go to the rewardswallet of the delegate.
         3. the amount sent to the voter.
 
-    if a transaction did not pass the parameters of payoutsender (for example the amount was below the minimum payout amount),
+    If a transaction did not pass the parameters of payoutsender (for example the amount was below the minimum payout amount),
     payoutsender raises a TxParameterError
+
+    frq_dict is a map of address: int, where the options 1, 2 and 3 are accepted. 1 is a daily payout, 2 is weekly, and 3 is monthly.
+    If an invalid frequency is provided, an InputError is raised. The standard frequency for a voter is weekly
+
+
 
     taxes (the part that goes to the delegate) are calculated at sending level.
 
@@ -152,6 +157,7 @@ timestamp_brackets
 
 The sender will check the keys from high to low, where the order of operations is low > high. So in this example if the
 vote_timestamp is smaller than 16247647, the share ratio is 0.96 (or 96%)
+
 
 day_weekly_payout and day_monthly_payout
     Are the days where you want to send payouts for frequency 2 and 3 (weekly and monthly) 0 is monday, 6 is sunday for day_weekly_payout
