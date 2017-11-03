@@ -183,7 +183,7 @@ Payoutsender_test
     if set to true, instead of sending the transactions, the send function returns True. Use this when setting up your payoutscript
 
 
-arkdbtools user a logger
+arkdbtools comes with a logger that saved the files in /tmp/arkdbtools.log
 
 >>> LOGGING = {
     'USE': True,
