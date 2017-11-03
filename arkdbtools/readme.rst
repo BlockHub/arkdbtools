@@ -8,7 +8,7 @@ a bit.
 
 To use, simply:
 
-    >>> pip install arkdbtools
+    pip install arkdbtools
 
 This library requires a running ark-node to operate: https://github.com/ArkEcosystem/ark-node.
 We will set one up here as well. I recommend digitalocean as a vps provider. There are no fees for using arkdbtools,
@@ -45,8 +45,8 @@ If you use the rebuild DB option in Ark-commander, you will have to redo these s
 
 When using arkdbtools, set the connection parameters first:
 
-    >>> import arkdbtools as ark
-    >>> ark.set_connection(host='localhost',
+>>> import arkdbtools as ark
+>>> ark.set_connection(host='localhost',
                            database='ark_mainnet',
                            user=<username>,
                            password=<password>,)
@@ -54,11 +54,11 @@ When using arkdbtools, set the connection parameters first:
 Now if you want to calculate the trueblockweight share for a given delegate, we set delegate parameters first:
 If you specifiy your passphrase, arkdbtools will generate your keys using Arky (by Toons).
 
-    >>> ark.set_delegate(address='Adressandsomemore', delegate_pubkey='publickeyofdelegate',)
+>>> ark.set_delegate(address='Adressandsomemore', delegate_pubkey='publickeyofdelegate',)
 
 Next generate a dictionary containing the payouts:
 
-    >>> payouts, timestamp_at_calculation = ark.Delegate.share()
+>>> payouts, timestamp_at_calculation = ark.Delegate.share()
 
 .share() starts adding a running balance from the last transaction between a voter and the delegate.
 You can specify custom start point using the argument last_payout. This takes either an integer and uses that for every
@@ -70,37 +70,37 @@ Customizing calculations
 Calculation settings
     arkdbtools contains a config.py file where different settings influence Delegate.share() flow controls.
 
-    >>> CALCULATION SETTINGS{...}
+>>> CALCULATION SETTINGS{...}
 
     are performed at the calculation level. Capitalized keys need to remain capitalized.
 
 Blacklisting voters
     The option blacklist completely removes an address from the calculation. The share is evenly divided over all voters.
 
-    >>> 'BLACKLIST': ['address',],
+>>> 'BLACKLIST': ['address',],
 
 An Ark balance exception for a single address
     Exceptions allow you to replace the amount of Ark someone votes with. Use this to decrease the amount of large voters for example.
     If they remove Ark from their balance, and it drops below the amount specified in REPLACE, their current balance is used.
 
-    >>> 'EXCEPTIONS': {'address': {'REPLACE': 'int else None'}},
+>>> 'EXCEPTIONS': {'address': {'REPLACE': 'int else None'}},
 
 Maximum voteweight
     This is the maximum value for the balance of a voter. If someone votes with more, his voteweight is reduced to the max amount for calculation
     purposes.
 
-    >>> 'MAX': float('inf'),
+>>> 'MAX': float('inf'),
 
 Share fees
     A delegate receives both a block reward (2 Ark per block) and transaction fees. Set share_fees to True if you
     wish to share these fees as well. In my experience the average weekly fees for a delegate are +30 Ark.
 
-    >>> 'SHARE_FEES': False,
+>>> 'SHARE_FEES': False,
 
 
 You can modify these settings using:
 
-    >>> set_calculation(blacklist, exceptions, max_amount, share_fees)
+>>> set_calculation(blacklist, exceptions, max_amount, share_fees)
 
 This will make sure that these settings are only used in the namespace of the module
 
@@ -134,7 +134,7 @@ Payoutsender
 
 Setting the sender is also quite easy.
 
-    >>> dbtools.set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=None, timestamp_brackets=None,
+>>> dbtools.set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=None, timestamp_brackets=None,
                            min_payout_daily=1, min_payout_weekly=0, min_payout_monthly=0, day_weekly_payout=0, day_monthly_payout=10,
                            payoutsender_test=True, sender_exception=None)
 
@@ -150,8 +150,8 @@ timestamp_brackets
 >>>         16247647    : 0.96
 >>>                             }
 
-    The sender will check the keys from high to low, where the order of operations is low > high. So in this example if the
-    vote_timestamp is smaller than 16247647, the share ratio is 0.96 (or 96%)
+The sender will check the keys from high to low, where the order of operations is low > high. So in this example if the
+vote_timestamp is smaller than 16247647, the share ratio is 0.96 (or 96%)
 
 day_weekly_payout and day_monthly_payout
     Are the days where you want to send payouts for frequency 2 and 3 (weekly and monthly) 0 is monday, 6 is sunday for day_weekly_payout
