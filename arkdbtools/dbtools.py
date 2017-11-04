@@ -136,22 +136,14 @@ class DbCursor:
 
 class Blockchain():
     @staticmethod
-    def height(redundancy=3):
+    def height():
+        api.use('ark')
         height = []
-        function = api.Block.getBlockchainHeight
-        for i in range(redundancy):
-            try:
-                api.use('ark')
-                height.append(utils.api_call(function)['height'])
-            except Exception:
-                pass
-
+        for p in api.Peer.getPeersList()['peers']:
+            height.append(p['height'])
         if not height:
-            logger.fatal(
-                'Could not get a result through api for {0}, with redundancy: {1}'.format(function, redundancy)
-            )
-            raise ApiError('Could not get a result through api for {0}, with redundancy: {1}'.format(function, redundancy))
-
+            logger.critical('Could not obtain heights from peerslist: {}'.format(height))
+            raise ApiError('Could not obtain heights from peerslist: {}'.format(height))
         return max(height)
 
 
