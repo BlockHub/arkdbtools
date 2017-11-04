@@ -666,7 +666,6 @@ class Delegate:
         logger.info('starting share calculation using settings: {0} {1}'.format(c.DELEGATE, c.CALCULATION_SETTINGS))
         cursor = DbCursor()
 
-        # todo: this code is a bit of a mess and should really be refactored into smaller, testable chunks
         if passphrase:
             delegate_keys = core.getKeys(secret=passphrase,
                                          network='ark',
@@ -744,18 +743,6 @@ class Delegate:
                     balance = voter_dict[i]['balance']
 
                     try:
-                        if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['MAX']:
-                            balance = c.CALCULATION_SETTINGS['MAX']
-                    except Exception:
-                        pass
-
-                    try:
-                        if balance > c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']:
-                            balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']
-                    except Exception:
-                        pass
-
-                    try:
                         for x in voter_dict[i]['blocks_forged']:
                             if x.timestamp < blocks[block_nr].timestamp:
                                 voter_dict[i]['balance'] += (x.reward + x.totalFee)
@@ -773,15 +760,6 @@ class Delegate:
 
                 for i in voter_dict:
                     balance = voter_dict[i]['balance']
-
-                    if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['MAX']:
-                        balance = c.CALCULATION_SETTINGS['MAX']
-
-                    try:
-                        if balance > c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']:
-                            balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']
-                    except Exception:
-                        pass
 
                     if voter_dict[i]['status'] and voter_dict[i]['last_payout'] < blocks[block_nr].timestamp:
                         if c.CALCULATION_SETTINGS['SHARE_FEES']:
