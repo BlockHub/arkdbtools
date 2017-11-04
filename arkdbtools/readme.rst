@@ -6,9 +6,8 @@ Since I noticed that I often reused the same code in different projects related 
 a bit.
 
 
-To use, simply:
-
-    pip install arkdbtools
+To use
+ >>> import arkdbtools
 
 This library requires a running ark-node to operate: https://github.com/ArkEcosystem/ark-node.
 We will set one up here as well. I recommend digitalocean as a vps provider. There are no fees for using arkdbtools,
