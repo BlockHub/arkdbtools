@@ -840,7 +840,7 @@ class Core:
         # set standard amount
         # if the delegate covers the fees, it is added to the amount to be sent, since it is automatically substracted
         # by the send functions
-        amount = data[1]['share'] * c.SENDER_SETTINGS['DEFAULT_SHARE'] + fees
+        amount = (data[1]['share'] * c.SENDER_SETTINGS['DEFAULT_SHARE'])
 
         # set frequency according to frequency argument
         try:
@@ -854,13 +854,13 @@ class Core:
         try:
             for i in c.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
                 if data[1]['vote_timestamp'] < i:
-                    amount = ((data[1]['share'] * c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i]) + fees)
+                    amount = ((data[1]['share'] * c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i]))
         except Exception:
             pass
 
         # set amount according to SHARE_PERCENTAGE_EXCEPTIONS
         try:
-            amount = ((data[1]['share'] * c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'][address]) + fees)
+            amount = ((data[1]['share'] * c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'][address]))
         except Exception:
             pass
 
@@ -882,18 +882,21 @@ class Core:
         if frequency == 1:
             if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_DAY']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_DAILY']:
+                    amount += fees
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
 
         elif frequency == 2 and day_week == c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT']:
             if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_WEEK']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY']:
+                    amount += fees
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
 
         elif frequency == 3 and day_month == c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT']:
             if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_MONTH']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY']:
+                    amount += fees
                     result = Core.send(address, amount)
                     return result, delegate_share, amount
         logger.debug('tx did not pass the required parameters for sending (should happen often) : {0}'.format(data))
