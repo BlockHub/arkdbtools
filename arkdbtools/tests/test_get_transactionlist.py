@@ -12,7 +12,7 @@ class TestGet_transactionlist(TestCase):
         )
 
     def test_get_transactionlist(self):
-        from arkdbtools.utils import get_transactionlist
+        from arkdbtools.dbtools import get_transactionlist
 
 
         delegate_pubkey = 'AZse3vk8s3QEX1bqijFb21aSBeoF6vqLYE'

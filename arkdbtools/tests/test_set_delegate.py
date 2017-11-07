@@ -21,7 +21,8 @@ class TestSet_delegate(TestCase):
         set_delegate(
             address= '1',
             pubkey=  '2',
-            secret=  '3')
+            secret=  '3',
+        )
         self.assertCountEqual(c.DELEGATE, resultset)
 
     def test_set_delegate_clear(self):

@@ -152,8 +152,7 @@ class Node:
     def height():
         res = None
         try:
-            cursor = DbCursor()
-            res = cursor.execute_and_fetchone("""
+            res = DbCursor().execute_and_fetchone("""
                             SELECT max(blocks."height") 
                             FROM blocks
             """)[0]
@@ -176,9 +175,8 @@ class Node:
     def max_timestamp():
         # Fetch the max timestamp as it occurs in table blocks, or return
         # a previously cached value.
-        cursor = DbCursor()
         try:
-            r = cursor.execute_and_fetchone("""
+            r = DbCursor().execute_and_fetchone("""
                     SELECT max(timestamp) 
                     FROM blocks
             """)[0]
@@ -193,14 +191,54 @@ class Node:
 
 
 class Address:
+
+    @staticmethod
+    def payout(address):
+        """returns all received transactions between the address and registered delegate accounts
+        ORDER by timestamp ASC."""
+        qry = DbCursor().execute_and_fetchall("""
+                SELECT transactions."id", transactions."amount",
+                       transactions."timestamp", transactions."recipientId",
+                       transactions."senderId", transactions."rawasset",
+                       transactions."type", transactions."fee"
+                FROM transactions
+                WHERE transactions."senderId" IN (
+                  SELECT transactions."senderId" 
+                  FROM transactions, delegates 
+                  WHERE transactions."id" = delegates."transactionId"
+                )
+                AND transactions."recipientId" = '{}'
+                ORDER BY transactions."timestamp" ASC""".format(address))
+
+        Transaction = namedtuple(
+            'transaction',
+            'id amount timestamp recipientId senderId rawasset type fee')
+        named_transactions = []
+
+        for i in qry:
+            tx_id = Transaction(
+                id=i[0],
+                amount=i[1],
+                timestamp=i[2],
+                recipientId=i[3],
+                senderId=i[4],
+                rawasset=i[5],
+                type=i[6],
+                fee=i[7],
+            )
+
+            named_transactions.append(tx_id)
+        for x in named_transactions:
+            print(x)
+        return named_transactions
+
     @staticmethod
     def transactions(address):
         """Returns a list of named tuples of all transactions for an address.
         Scheme:
         'transaction',
             'id amount timestamp recipientId senderId rawasset type fee'"""
-        cursor = DbCursor()
-        qry = cursor.execute_and_fetchall("""
+        qry = DbCursor().execute_and_fetchall("""
         SELECT transactions."id", transactions."amount",
                transactions."timestamp", transactions."recipientId",
                transactions."senderId", transactions."rawasset",
@@ -232,13 +270,13 @@ class Address:
 
     @staticmethod
     def votes(address):
-        """Returns a map all votes made by an address, {(+/-)pubkeydelegate:timestamp}"""
-        cursor = DbCursor()
-        qry = cursor.execute_and_fetchall("""
+        """Returns a map all votes made by an address, {(+/-)pubkeydelegate:timestamp}, timestamp DESC"""
+        qry = DbCursor().execute_and_fetchall("""
            SELECT votes."votes", transactions."timestamp"
            FROM votes, transactions
            WHERE transactions."id" = votes."transactionId"
            AND transactions."recipientId" = '{}'
+           ORDER BY transactions."timestamp" DESC
         """.format(address))
 
         Vote = namedtuple(
@@ -292,8 +330,7 @@ class Delegate:
     def delegates():
         """returns a list of named tuples of all delegates.
         {username: {'pubkey':pubkey, 'timestamp':timestamp, 'address':address}}"""
-        cursor = DbCursor()
-        qry = cursor.execute_and_fetchall("""
+        qry = DbCursor().execute_and_fetchall("""
             SELECT delegates."username", delegates."transactionId", transactions."timestamp", transactions."senderId", 
             transactions."senderPublicKey" 
             FROM transactions
@@ -321,15 +358,13 @@ class Delegate:
         Assumes that all send transactions from a delegate are payouts.
         Use blacklist to remove rewardwallet and other transactions if the
         address is not a voter. blacklist can contain both addresses and transactionIds'''
-        cursor = DbCursor()
-
         if blacklist and len(blacklist) > 1:
             command_blacklist = 'NOT IN ' + str(tuple(blacklist))
         elif blacklist and len(blacklist) == 1:
             command_blacklist = '!= ' + "'" + blacklist[0] + "'"
         else:
             command_blacklist = "!= 'nothing'"
-        qry = cursor.execute_and_fetchall("""
+        qry = DbCursor().execute_and_fetchall("""
                     SELECT ts."recipientId", ts."id", ts."timestamp"
                     FROM transactions ts,
                       (SELECT MAX(transactions."timestamp") AS max_timestamp, transactions."recipientId"
@@ -360,14 +395,13 @@ class Delegate:
     @staticmethod
     def votes(delegate_pubkey):
         """returns every address that has voted for a delegate.
-        Current voters can be obtained using voters"""
-        cursor = DbCursor()
-
-        qry = cursor.execute_and_fetchall("""
+        Current voters can be obtained using voters. ORDER BY timestamp ASC"""
+        qry = DbCursor().execute_and_fetchall("""
                  SELECT transactions."recipientId", transactions."timestamp"
                  FROM transactions, votes
                  WHERE transactions."id" = votes."transactionId"
-                 AND votes."votes" = '+{}';
+                 AND votes."votes" = '+{}'
+                 ORDER BY transactions."timestamp" ASC;
         """.format(delegate_pubkey))
 
         Voter = namedtuple(
@@ -384,13 +418,12 @@ class Delegate:
 
     @staticmethod
     def unvotes(delegate_pubkey):
-        cursor = DbCursor()
-
-        qry = cursor.execute_and_fetchall("""
+        qry = DbCursor().execute_and_fetchall("""
                          SELECT transactions."recipientId", transactions."timestamp"
                          FROM transactions, votes
                          WHERE transactions."id" = votes."transactionId"
-                         AND votes."votes" = '-{}';
+                         AND votes."votes" = '-{}'
+                         ORDER BY transactions."timestamp" ASC;
                 """.format(delegate_pubkey))
 
         Voter = namedtuple(
@@ -407,6 +440,7 @@ class Delegate:
         return unvoters
 
     @staticmethod
+    # todo make this into a single SQL call and move the logic to the DB to increase efficiency
     def voters(delegate_pubkey=None):
         if not delegate_pubkey:
             delegate_pubkey = c.DELEGATE['PUBKEY']
@@ -430,9 +464,8 @@ class Delegate:
             max_timestamp_sql = """ blocks."timestamp" <= {} AND""".format(max_timestamp)
         else:
             max_timestamp_sql = ''
-        cursor = DbCursor()
 
-        qry = cursor.execute_and_fetchall("""
+        qry = DbCursor().execute_and_fetchall("""
              SELECT blocks."timestamp", blocks."height", blocks."id", blocks."totalFee", blocks."reward"
              FROM blocks
              WHERE {0} blocks."generatorPublicKey" = '\\x{1}'
@@ -466,8 +499,6 @@ class Delegate:
         very risky)
         """
         logger.info('starting share calculation using settings: {0} {1}'.format(c.DELEGATE, c.CALCULATION_SETTINGS))
-        cursor = DbCursor()
-
         # todo: this code is a bit of a mess and should really be refactored into smaller, testable chunks
         if passphrase:
             delegate_keys = core.getKeys(secret=passphrase,
@@ -734,6 +765,7 @@ class Delegate:
                 for i in voter_dict:
                     balance = voter_dict[i]['balance']
 
+                    #checks if a delegate that votes for us is has forged blocks in the mean time
                     try:
                         for x in voter_dict[i]['blocks_forged']:
                             if x.timestamp < blocks[block_nr].timestamp:
@@ -840,6 +872,7 @@ class Core:
         # set standard amount
         # if the delegate covers the fees, it is added to the amount to be sent, since it is automatically substracted
         # by the send functions
+
         amount = (data[1]['share'] * c.SENDER_SETTINGS['DEFAULT_SHARE'])
 
         # set frequency according to frequency argument
@@ -854,13 +887,13 @@ class Core:
         try:
             for i in c.SENDER_SETTINGS['TIMESTAMP_BRACKETS']:
                 if data[1]['vote_timestamp'] < i:
-                    amount = ((data[1]['share'] * c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i]))
+                    amount = (data[1]['share'] * c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'][i])
         except Exception:
             pass
 
         # set amount according to SHARE_PERCENTAGE_EXCEPTIONS
         try:
-            amount = ((data[1]['share'] * c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'][address]))
+            amount = (data[1]['share'] * c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'][address])
         except Exception:
             pass
 
@@ -876,7 +909,7 @@ class Core:
             raise AllocationError('Amount allocated to {0} was greater than the trueblockweight allocation, or frequency: {1} was not in in [1,2,3]. Amount: {2} Trueweightallocation: {3} Check your configuration for SENDER_EXCEPTIONS'.format(address, frequency, amount, data[1]['share']))
 
         # set delegate share
-        delegate_share = data[1]['share'] - amount
+        delegate_share = data[1]['share'] - amount - fees
 
 
         if frequency == 1:
@@ -907,9 +940,8 @@ def get_transactionlist(delegate_pubkey):
     """returns a list of named tuples of all transactions relevant to a specific delegates voters.
     Flow: finds all voters and unvoters, SELECTs all transactions of those voters, names all transactions according to
     the scheme: 'transaction', 'id amount timestamp recipientId senderId rawasset type fee blockId'"""
-    cursor = DbCursor()
 
-    res = cursor.execute_and_fetchall("""
+    res = DbCursor().execute_and_fetchall("""
         SELECT transactions."id", transactions."amount",
                transactions."timestamp", transactions."recipientId",
                transactions."senderId", transactions."rawasset",

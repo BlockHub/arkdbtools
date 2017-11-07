@@ -51,3 +51,25 @@ class TestAddress(TestCase):
         self.assertIsInstance(balance, int)
         self.assertIsInstance(apibalance, int)
         self.assertEquals(balance, apibalance)
+
+    def test_payout(self):
+        from arkdbtools.dbtools import Address
+        address = 'AMbR3sWGzF3rVqBrgYRnAvxL2TVh44ZEft'
+        payouts = Address.payout(address)
+
+        self.assertIsInstance(payouts, list)
+
+        # this test depends on the state of Ark, in my testnode, only 2 payouts have occured
+        # (it is not connected to the network and thus does not update
+        self.assertTrue(len(payouts) == 2)
+        for i in payouts:
+            self.assertIsInstance(i, tuple)
+            self.assertIsInstance(i.id, str)
+            self.assertIsInstance(i.amount, int)
+            self.assertIsInstance(i.timestamp, int)
+            self.assertIsInstance(i.recipientId, str)
+            self.assertIsInstance(i.senderId, str)
+            self.assertIsInstance(i.rawasset, str)
+            self.assertIsInstance(i.type, int)
+            self.assertIsInstance(i.fee, int)
+

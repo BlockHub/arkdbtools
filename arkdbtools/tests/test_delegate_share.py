@@ -99,7 +99,7 @@ class TestDelegateShare(TestCase):
         delegate_pubkey = '0218b77efb312810c9a549e2cc658330fcc07f554d465673e08fa304fa59e67a0a'
 
         payouts_no_setting, timestamp = Delegate.share(del_pubkey=delegate_pubkey, del_address=delegate)
-        set_calculation(max=0.0000001)
+        set_calculation(max_amount=0.0000001)
         payouts, timestamp = Delegate.share(del_pubkey=delegate_pubkey, del_address=delegate)
 
         previous_key = list(payouts.keys())[0]
