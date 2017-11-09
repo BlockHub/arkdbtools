@@ -1021,3 +1021,6 @@ def get_transactionlist(delegate_pubkey):
 
         named_transactions.append(tx_id)
     return named_transactions
+
+def new():
+    print('helloworld')
