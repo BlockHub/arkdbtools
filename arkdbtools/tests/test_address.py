@@ -73,3 +73,32 @@ class TestAddress(TestCase):
             self.assertIsInstance(i.type, int)
             self.assertIsInstance(i.fee, int)
 
+    def test_balance_over_time(self):
+        from arkdbtools.dbtools import Address
+
+        # for a normal address
+        address = 'AMbR3sWGzF3rVqBrgYRnAvxL2TVh44ZEft'
+        balance = Address.balance(address)
+        balance_over_time = Address.balance_over_time(address)
+
+        self.assertIsInstance(balance_over_time, list)
+        for i in balance_over_time:
+            self.assertIsInstance(i, tuple)
+            self.assertIsInstance(i.timestamp, int)
+            self.assertIsInstance(i.amount, int)
+
+        self.assertEqual(balance, balance_over_time[len(balance_over_time)-1].amount)
+
+        # now for a delegate
+        address = 'AZse3vk8s3QEX1bqijFb21aSBeoF6vqLYE'
+        balance = Address.balance(address)
+        balance_over_time = Address.balance_over_time(address)
+
+        self.assertIsInstance(balance_over_time, list)
+        for i in balance_over_time:
+            self.assertIsInstance(i, tuple)
+            self.assertIsInstance(i.timestamp, int)
+            self.assertIsInstance(i.amount, int)
+
+        self.assertEqual(balance, balance_over_time[len(balance_over_time) - 1].amount)
+

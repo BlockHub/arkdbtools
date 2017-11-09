@@ -1,5 +1,5 @@
 import time
-
+import datetime
 
 def api_call(func, *args, **kwargs):
     result = None
@@ -56,6 +56,21 @@ def arktimestamp(arkt, forfilename=False):
     t = arkt + time.mktime((2017, 3, 21, 15, 55, 44, 0, 0, 0))
     return '%d %s' % (arkt, timestamp(t))
 
+
+def arkt_to_datetime(ark_timestamp):
+    """convert an ark_timestamp to UTC datetime object"""
+    return datetime.datetime(2017, 3, 21, 15, 55, 44) + datetime.timedelta(seconds=ark_timestamp)
+
+
+def arkt_to_unixt(ark_timestamp):
+    """ convert ark timestamp to unix timestamp"""
+    res = datetime.datetime(2017, 3, 21, 15, 55, 44) + datetime.timedelta(seconds=ark_timestamp)
+    return res.timestamp()
+
+
+def datetime_to_arkt(datetime):
+    """convert a datetime object to ark timestamp"""
+    return datetime.timestamp() - datetime.datetime(2017, 3, 21, 15, 55, 44).timestamp
 
 
 

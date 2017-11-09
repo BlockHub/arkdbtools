@@ -139,8 +139,12 @@ class Blockchain():
     def height():
         api.use('ark')
         height = []
-        for p in api.Peer.getPeersList()['peers']:
-            height.append(p['height'])
+        for p in utils.api_call(api.Peer.getPeersList)['peers']:
+            # some nodes are behind/offline/produce errors and don't respond with a height key
+            try:
+                height.append(p['height'])
+            except Exception:
+                pass
         if not height:
             logger.critical('Could not obtain heights from peerslist: {}'.format(height))
             raise ApiError('Could not obtain heights from peerslist: {}'.format(height))
@@ -185,7 +189,7 @@ class Node:
             raise NodeDbError('failed to receive a response from the ark-node: {}'.format(e))
 
         if not r:
-            logger.fatal('failed to get max timestamp from node. {}'.format(cursor))
+            logger.fatal('failed to get max timestamp from node. {}'.format(DbCursor()))
             raise NodeDbError('failed to get max timestamp from node.')
         return r
 
@@ -228,8 +232,6 @@ class Address:
             )
 
             named_transactions.append(tx_id)
-        for x in named_transactions:
-            print(x)
         return named_transactions
 
     @staticmethod
@@ -322,6 +324,47 @@ class Address:
             logger.fatal('Negative balance for address {0}, Nodeheight: {1)'.format(address, height))
             raise NegativeBalanceError('Negative balance for address {0}, Nodeheight: {1)'.format(address, height))
         return balance
+
+    @staticmethod
+    def balance_over_time(address):
+        """returns a list of named tuples,  x.timestamp, x.amount including block rewards"""
+        forged_blocks = None
+        txhistory = Address.transactions(address)
+        delegates = Delegate.delegates()
+        for i in delegates:
+            if address == i.address:
+                forged_blocks = Delegate.blocks(i.pubkey)
+
+        balance_over_time = []
+        balance = 0
+        block = 0
+
+        Balance = namedtuple(
+            'balance',
+            'timestamp amount')
+        for tx in txhistory:
+            if forged_blocks:
+                while forged_blocks[block].timestamp <= tx.timestamp:
+                    block += 1
+                    balance += (forged_blocks[block].reward + forged_blocks[block].totalFee)
+                    res = Balance(timestamp=forged_blocks[block].timestamp, amount=balance)
+                    balance_over_time.append(res)
+
+                if forged_blocks[block].timestamp > txhistory[len(txhistory) - 1].timestamp:
+                    for i in forged_blocks[block:]:
+                        balance += (i.reward + i.totalFee)
+                        res = Balance(timestamp=i.timestamp, amount=balance)
+                        balance_over_time.append(res)
+
+            if tx.senderId == address:
+                balance -= (tx.amount + tx.fee)
+                res = Balance(timestamp=tx.timestamp, amount=balance)
+                balance_over_time.append(res)
+            if tx.recipientId == address:
+                balance += tx.amount
+                res = Balance(timestamp=tx.timestamp, amount=balance)
+                balance_over_time.append(res)
+        return balance_over_time
 
 
 class Delegate:
@@ -838,12 +881,12 @@ class Core:
                               vendorField=smartbridge)
         tx.sign(secret)
         tx.serialize()
-        for i in range(5):
-            result = api.sendTx(tx)
+
+        result = api.broadcast(tx)
+        logger.debug(result)
+        if result['success']:
             logger.debug(result)
-            if result['success']:
-                logger.debug(result)
-                return result
+            return result
 
         logger.fatal('failed to send transaction 5 times, response: {}'.format(result))
         raise ApiError('failed to send transaction 5 times, response: {}'.format(result))

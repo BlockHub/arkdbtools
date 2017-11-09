@@ -81,7 +81,6 @@ class TestDelegateShare(TestCase):
         self.assertIsInstance(payouts_no_setting, dict)
 
         self.assertTrue(payouts.items() <= payouts_no_setting.items())
-        print(payouts_no_setting[address]['share'], payouts[address]['share'])
 
         # the address has a very low balance, so 100000 ARK shouldn't overide its share value,
         # since it is too low
