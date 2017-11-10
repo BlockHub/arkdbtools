@@ -1,4 +1,4 @@
-arkdbtools
+# arkdbtools
 
 arkdbtools is basically a set of functions and SQL used to query the ark-blockchain through an ark-node. Since I noticed that I often reused the same code in different projects related to Ark, I decided to generalize the code a bit.
 
@@ -54,7 +54,7 @@ ark.set_connection(
     user=<username>,
     password=<password>,
 )
-
+```
 Arkdbtools has quite a few different queries, and more are added weekly, so I suggest reading the code to see what is possible. Below are some examples:
 
 If you want to calculate the trueblockweight share for a given delegate, we set delegate parameters first: If you specifiy your passphrase, arkdbtools will generate your keys using Arky (by Toons).
@@ -76,34 +76,34 @@ payouts, timestamp_at_calculation = ark.Delegate.share()
 point using the argument last_payout. This takes either an integer and uses that for every single voter, or a map {address: timestamp} 
 to customise it for each voter.
 
-Customizing calculations
+## Customizing calculations
 
-Calculation settings
+###### Calculation settings
 arkdbtools contains a config.py file where different settings influence Delegate.share() flow controls. These options are performed at 
 the calculation level. Capitalized keys need to remain capitalized throughout every setting.
 ```python
 CALCULATION SETTINGS{...}
 ```
 
-Blacklisting voters
+###### Blacklisting voters
 The option blacklist completely removes an address from the calculation. The share is evenly divided over all voters.
 
 ```python
 'BLACKLIST': ['address',],
 ```
-An Ark balance exception for a single address
+###### An Ark balance exception for a single address
 Exceptions allow you to replace the amount of Ark someone votes with. Use this to decrease the amount of large voters for example. If they remove Ark from their balance, and it drops below the amount specified in REPLACE, their current balance is used.
 
 ```python
 'EXCEPTIONS': {'address': {'REPLACE': 'int else None'}},
 ```
-Maximum voteweight
+###### Maximum voteweight
 This is the maximum value for the balance of a voter. If someone votes with more, his voteweight is reduced to the max amount for calculation purposes.
 ```python
 'MAX': float('inf'),
 ```
 
-Share fees
+###### Share fees
 A delegate receives both a block reward (2 Ark per block) and transaction fees. Set share_fees to True if you wish to share these fees as well. In my experience the average weekly fees for a delegate are +30 Ark.
 
 ```python
@@ -117,13 +117,15 @@ set_calculation(blacklist, exceptions, max_amount, share_fees)
 
 This will make sure that these settings are only used in the namespace of the module
 
-Core
+## Core
 
 Sending transactions
 dbtools also contains a Core class, which uses Arky to send transactions. 
 
 >>> arkdbtools.dbtools.Core.send(address, amount, smartbridge)
-Payoutsender
+
+###### Payoutsender
+
 This custom payoutsender uses a set of parameters to determine if a transaction should be sent. Data is a tuple, where data[0] is the address, and data[1] the dictionary value with the same schema as the return of the share() function. frq_dct is a map of addresses and frequencies, where 1 is daily, 2 is weekly, and 3 is monthly. Calculation_timestamp can be set if you wait some time between calculating and sending, else it will use the current Node timestamp (recommended).
 
 ```python
@@ -156,7 +158,7 @@ dbtools.set_sender(
   sender_exception=None
 )
  ```
-share_percentage_exceptions
+###### share_percentage_exceptions
 takes a map of address: float. This allows you to set custom share percentages for certain addresses.
 timestamp_brackets
 Are a bit more complicated. You need to pass a dictionary where the key is a timestamp, and the value is the share ratio.
@@ -165,12 +167,13 @@ Are a bit more complicated. You need to pass a dictionary where the key is a tim
 float('inf'): 0.95,
 16247647    : 0.96
 }
-
+```
 The sender will check the keys from high to low, where the order of operations is low > high. So in this example if the vote_timestamp is smaller than 16247647, the share ratio is 0.96 (or 96%)
 
-day_weekly_payout and day_monthly_payout
+###### day_weekly_payout and day_monthly_payout
 Are the days where you want to send payouts for frequency 2 and 3 (weekly and monthly) 0 is monday, 6 is sunday for day_weekly_payout day_monthly_payout takes integers from 0 to 30, however don't use 30 as you'll skip every other month then.
-sender_exception
+
+###### sender_exception
 allows you to set absolute exceptions for a specific address. If the amount is greater than their trueblockweight allocated amount, an AllocationError is thrown and the payoutsender quits.
 The order of operations of all of these settings is as follows:
 
@@ -179,10 +182,10 @@ The order of operations of all of these settings is as follows:
 * timestamp_brackets are used for all voters, unless they are also in share_percentage_exceptions.
 * default_share is used if none of the above apply.
 
-Cover_fees
+###### Cover_fees
 Cover_fees has one catch, you need to have a sufficient balance from your delegateshare to cover them, else your balance will run out while transmitting the transactions. An ApiError would then be raised.
 
-Payoutsender_test
+###### Payoutsender_test
 if set to true, instead of sending the transactions, the send function returns True. Use this when setting up your payoutscript
 arkdbtools comes with a logger that saved the files in /tmp/arkdbtools.log
 
