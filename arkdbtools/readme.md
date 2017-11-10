@@ -122,7 +122,9 @@ This will make sure that these settings are only used in the namespace of the mo
 Sending transactions
 dbtools also contains a Core class, which uses Arky to send transactions. 
 
->>> arkdbtools.dbtools.Core.send(address, amount, smartbridge)
+```python
+arkdbtools.dbtools.Core.send(address, amount, smartbridge)
+```
 
 ###### Payoutsender
 
@@ -199,4 +201,5 @@ LOGGING = {
                                                     backupCount=5),
     'FORMAT': '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 }
+```
 to disable the logger, manually edit config.py and set 'USE' to False. The logger uses a RotatingFileHandler, so your disk won't fill up. (there should be no need to disable it)
