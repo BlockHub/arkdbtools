@@ -871,7 +871,7 @@ class Delegate:
 class Core:
 
     @staticmethod
-    def send(address, amount, smartbridge=None, network='ark', secret=c.DELEGATE['SECRET']):
+    def send(address, amount, smartbridge=None, network='ark', secret=c.DELEGATE['PASSPHRASE']):
         if c.SENDER_SETTINGS['PAYOUTSENDER_TEST']:
             logger.debug('Transaction test send to {0} for amount: {1} with smartbridge: {2}'.format(address, amount, smartbridge))
             return True
