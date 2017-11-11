@@ -871,7 +871,7 @@ class Delegate:
 class Core:
 
     @staticmethod
-    def send(address, amount, smartbridge=None, network='ark', secret=c.DELEGATE['PASSPHRASE']):
+    def send(address, amount, smartbridge=None, network='ark', secret=None):
         if c.SENDER_SETTINGS['PAYOUTSENDER_TEST']:
             logger.debug('Transaction test send to {0} for amount: {1} with smartbridge: {2}'.format(address, amount, smartbridge))
             return True
@@ -892,7 +892,7 @@ class Core:
         raise ApiError('failed to send transaction 5 times, response: {}'.format(result))
 
     @staticmethod
-    def payoutsender(data, frq_dict=None, calculation_timestamp=None):
+    def payoutsender(data, frq_dict=None, calculation_timestamp=None, secret=None):
         # data[0] is always the address.
         # data[1] is a map having keys
         #         last_payout, status, share and vote_timestamp.
@@ -959,21 +959,21 @@ class Core:
             if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_DAY']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_DAILY']:
                     amount += fees
-                    result = Core.send(address, amount)
+                    result = Core.send(address, amount, secret)
                     return result, delegate_share, amount
 
         elif frequency == 2 and day_week == c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT']:
             if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_WEEK']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY']:
                     amount += fees
-                    result = Core.send(address, amount)
+                    result = Core.send(address, amount, secret)
                     return result, delegate_share, amount
 
         elif frequency == 3 and day_month == c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT']:
             if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_MONTH']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY']:
                     amount += fees
-                    result = Core.send(address, amount)
+                    result = Core.send(address, amount, secret)
                     return result, delegate_share, amount
         logger.debug('tx did not pass the required parameters for sending (should happen often) : {0}'.format(data))
         raise TxParameterError('tx did not pass the required parameters for sending (should happen often) : {0}'.format(data))
