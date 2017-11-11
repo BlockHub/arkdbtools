@@ -7,7 +7,7 @@ class TestSet_delegate(TestCase):
         from arkdbtools import config as c
         c.DELEGATE['ADDRESS'] = None
         c.DELEGATE['PUBKEY'] = None
-        c.DELEGATE['SECRET'] = None
+        c.DELEGATE['PASSPHRASE'] = None
 
     def test_set_delegate(self):
         from arkdbtools.dbtools import set_delegate

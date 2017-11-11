@@ -21,7 +21,7 @@ CONNECTION = {
 DELEGATE = {
     'ADDRESS': None,
     'PUBKEY':  None,
-    'PASSPHRASE':  None
+    'PASSPHRASE':  None,
 }
 
 ARK = 100000000

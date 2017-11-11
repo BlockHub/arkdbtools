@@ -50,48 +50,47 @@ class ParseError(Exception):
 
 def set_connection(host=None, database=None, user=None, password=None):
     """Set connection parameters. Call set_connection with no arguments to clear."""
-    c.CONNECTION['HOST'] = host
-    c.CONNECTION['DATABASE'] = database
-    c.CONNECTION['USER'] = user
-    c.CONNECTION['PASSWORD'] = password
+    host = c.CONNECTION['HOST']
+    database = c.CONNECTION['DATABASE']
+    user = c.CONNECTION['USER']
+    password = c.CONNECTION['PASSWORD']
 
 
 def set_delegate(address=None, pubkey=None, secret=None):
     """Set delegate parameters. Call set_delegate with no arguments to clear."""
-    c.DELEGATE['ADDRESS'] = address
-    c.DELEGATE['PUBKEY'] = pubkey
-    c.DELEGATE['PASSPHRASE'] = secret
+    address = c.DELEGATE['ADDRESS']
+    pubkey = c.DELEGATE['PUBKEY']
+    secret = c.DELEGATE['PASSPHRASE']
 
 
 def set_calculation(blacklist=None, exceptions=None, max_amount=float('inf'), share_fees=False ):
     if not exceptions:
         exceptions = {'address': {'replace': 'int else None'}}
 
-    c.CALCULATION_SETTINGS['BLACKLIST'] = blacklist
-    c.CALCULATION_SETTINGS['EXCEPTIONS'] = exceptions
-    c.CALCULATION_SETTINGS['MAX'] = max_amount
-    c.CALCULATION_SETTINGS['SHARE_FEES'] = share_fees
+    blacklist = c.CALCULATION_SETTINGS['BLACKLIST']
+    exceptions = c.CALCULATION_SETTINGS['EXCEPTIONS']
+    max_amount = c.CALCULATION_SETTINGS['MAX']
+    share_fees = c.CALCULATION_SETTINGS['SHARE_FEES']
 
 
 def set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=None, timestamp_brackets=None,
                min_payout_daily=0, min_payout_weekly=0, min_payout_monthly=0, day_weekly_payout=5, day_monthly_payout=10,
                payoutsender_test=True, sender_exception=None, wait_time_day=0, wait_time_week=0, wait_time_month=0):
 
-
-    c.SENDER_SETTINGS['DEFAULT_SHARE'] = default_share
-    c.SENDER_SETTINGS['COVER_FEES'] = cover_fees
-    c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS'] = share_percentage_exceptions
-    c.SENDER_SETTINGS['TIMESTAMP_BRACKETS'] = timestamp_brackets
-    c.SENDER_SETTINGS['MIN_PAYOUT_DAILY'] = min_payout_daily
-    c.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY'] = min_payout_weekly
-    c.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY'] = min_payout_monthly
-    c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT'] = day_weekly_payout
-    c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT'] = day_monthly_payout
-    c.SENDER_SETTINGS['PAYOUTSENDER_TEST'] = payoutsender_test
-    c.SENDER_SETTINGS['SENDER_EXCEPTIONS'] = sender_exception
-    c.SENDER_SETTINGS['WAIT_TIME_DAY'] = wait_time_day
-    c.SENDER_SETTINGS['WAIT_TIME_WEEK'] = wait_time_week
-    c.SENDER_SETTINGS['WAIT_TIME_MONTH'] = wait_time_month
+    default_share = c.SENDER_SETTINGS['DEFAULT_SHARE']
+    cover_fees = c.SENDER_SETTINGS['COVER_FEES']
+    share_percentage_exceptions = c.SENDER_SETTINGS['SHARE_PERCENTAGE_EXCEPTIONS']
+    timestamp_brackets = c.SENDER_SETTINGS['TIMESTAMP_BRACKETS']
+    min_payout_daily = c.SENDER_SETTINGS['MIN_PAYOUT_DAILY']
+    min_payout_weekly = c.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY']
+    min_payout_monthly = c.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY']
+    day_weekly_payout = c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT']
+    day_monthly_payout = c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT']
+    payoutsender_test = c.SENDER_SETTINGS['PAYOUTSENDER_TEST']
+    sender_exception = c.SENDER_SETTINGS['SENDER_EXCEPTIONS']
+    wait_time_day = c.SENDER_SETTINGS['WAIT_TIME_DAY']
+    wait_time_week = c.SENDER_SETTINGS['WAIT_TIME_WEEK']
+    wait_time_month = c.SENDER_SETTINGS['WAIT_TIME_MONTH']
 
 
 class DbConnection:
