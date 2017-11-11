@@ -16,7 +16,7 @@ class TestSet_delegate(TestCase):
         resultset = {
             'ADDRESS': '1',
             'PUBKEY':  '2',
-            'SECRET':  '3'}
+            'PASSPHRASE':  '3'}
 
         set_delegate(
             address= '1',
@@ -32,12 +32,12 @@ class TestSet_delegate(TestCase):
         resultset = {
             'ADDRESS': None,
             'PUBKEY': None,
-            'SECRET': None,
+            'PASSPHRASE': None,
         }
 
         c.DELEGATE['ADDRESS'] = '1'
         c.DELEGATE['PUBKEY'] = '2'
-        c.DELEGATE['SECRET'] = '3'
+        c.DELEGATE['PASSPHRASE'] = '3'
 
         set_delegate()
 
