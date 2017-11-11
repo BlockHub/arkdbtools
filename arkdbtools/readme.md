@@ -34,7 +34,8 @@ sudo -u postgres createuser <username>
 You can add a password for security reasons, this is not necessary if you run query through localhost, but a must if you are querying over the internet. Replace everything between <> with your user and password (erase <> as well )
 
 ```sh
-sudo -u postgres psql psql=# ALTER USER <username> WITH ENCRYPTED PASSWORD '<password>';
+sudo -u postgres psql 
+    psql=# ALTER USER <username> WITH ENCRYPTED PASSWORD '<password>';
 ```
 Next we give the user SELECT only privilege. This ensures you don't mess with the ark-database, which would otherwise break your node. Not necessary if you know what you are doing.
 
