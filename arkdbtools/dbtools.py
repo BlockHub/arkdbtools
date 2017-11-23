@@ -165,7 +165,7 @@ class Node:
             pass
         if not res:
             logger.fatal('failed to receive a response from the ark-node')
-            raise NodeDbError('failed to receive a response from the ark-node')
+            raise NodeDbError('failed to receive a response from the ark-node: {}'.format(e))
         return res
 
     @staticmethod
@@ -205,7 +205,7 @@ class Address:
                        transactions."timestamp", transactions."recipientId",
                        transactions."senderId", transactions."rawasset",
                        transactions."type", transactions."fee"
-                FROM transactions
+                FROM transactions, delegates
                 WHERE transactions."senderId" IN (
                   SELECT transactions."senderId" 
                   FROM transactions, delegates 
@@ -272,12 +272,12 @@ class Address:
 
     @staticmethod
     def votes(address):
-        """Returns a map all votes made by an address, {(+/-)pubkeydelegate:timestamp}, timestamp DESC"""
+        """Returns a list of namedtuples all votes made by an address, {(+/-)pubkeydelegate:timestamp}, timestamp DESC"""
         qry = DbCursor().execute_and_fetchall("""
            SELECT votes."votes", transactions."timestamp"
            FROM votes, transactions
            WHERE transactions."id" = votes."transactionId"
-           AND transactions."recipientId" = '{}'
+           AND transactions."senderId" = '{}'
            ORDER BY transactions."timestamp" DESC
         """.format(address))
 
@@ -628,89 +628,95 @@ class Delegate:
         block_nr = start_block
         chunk_dict = {}
         reuse = False
-        for tx in transactions:
-            while tx.timestamp > blocks[block_nr].timestamp:
-                if reuse:
+        try:
+            for tx in transactions:
+                while tx.timestamp > blocks[block_nr].timestamp:
+                    if reuse:
+                        block_nr += 1
+                        for x in chunk_dict:
+                            voter_dict[x]['share'] += chunk_dict[x]
+                        continue
                     block_nr += 1
-                    for x in chunk_dict:
-                        voter_dict[x]['share'] += chunk_dict[x]
-                    continue
-                block_nr += 1
-                poolbalance = 0
-                chunk_dict = {}
-                for i in voter_dict:
-                    balance = voter_dict[i]['balance']
+                    poolbalance = 0
+                    chunk_dict = {}
+                    for i in voter_dict:
+                        balance = voter_dict[i]['balance']
 
-                    try:
+                        try:
+                            if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['MAX']:
+                                balance = c.CALCULATION_SETTINGS['MAX']
+                        except Exception:
+                            pass
+
+                        try:
+                            if balance > c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']:
+                                balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']
+                        except Exception:
+                            pass
+
+                        try:
+                            for x in voter_dict[i]['blocks_forged']:
+                                if x.timestamp < blocks[block_nr].timestamp:
+                                    voter_dict[i]['balance'] += (x.reward + x.totalFee)
+                                    voter_dict[i]['blocks_forged'].remove(x)
+                            balance = voter_dict[i]['balance']
+                        except Exception:
+                            pass
+
+                        if voter_dict[i]['status']:
+                            if not voter_dict[i]['balance'] < 0:
+                                poolbalance += balance
+                            else:
+                                logger.fatal('balance lower than zero for: {0}'.format(i))
+                                raise NegativeBalanceError('balance lower than zero for: {0}'.format(i))
+
+                    for i in voter_dict:
+                        balance = voter_dict[i]['balance']
+
                         if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['MAX']:
                             balance = c.CALCULATION_SETTINGS['MAX']
-                    except Exception:
-                        pass
 
-                    try:
-                        if balance > c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']:
-                            balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']
-                    except Exception:
-                        pass
+                        try:
+                            if balance > c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']:
+                                balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']
+                        except Exception:
+                            pass
 
-                    try:
-                        for x in voter_dict[i]['blocks_forged']:
-                            if x.timestamp < blocks[block_nr].timestamp:
-                                voter_dict[i]['balance'] += (x.reward + x.totalFee)
-                                voter_dict[i]['blocks_forged'].remove(x)
-                        balance = voter_dict[i]['balance']
-                    except Exception:
-                        pass
-
-                    if voter_dict[i]['status']:
-                        if not voter_dict[i]['balance'] < 0:
-                            poolbalance += balance
-                        else:
-                            logger.fatal('balance lower than zero for: {0}'.format(i))
-                            raise NegativeBalanceError('balance lower than zero for: {0}'.format(i))
-
-                for i in voter_dict:
-                    balance = voter_dict[i]['balance']
-
-                    if voter_dict[i]['balance'] > c.CALCULATION_SETTINGS['MAX']:
-                        balance = c.CALCULATION_SETTINGS['MAX']
-
-                    try:
-                        if balance > c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']:
-                            balance = c.CALCULATION_SETTINGS['EXCEPTIONS'][i]['REPLACE']
-                    except Exception:
-                        pass
-
-                    if voter_dict[i]['status'] and voter_dict[i]['last_payout'] < blocks[block_nr].timestamp:
-                        if c.CALCULATION_SETTINGS['SHARE_FEES']:
-                            share = (balance/poolbalance) * (blocks[block_nr].reward +
-                                                             blocks[block_nr].totalFee)
-                        else:
-                            share = (balance/poolbalance) * blocks[block_nr].reward
-                        voter_dict[i]['share'] += share
-                        chunk_dict.update({i: share})
-                reuse = True
+                        if voter_dict[i]['status'] and voter_dict[i]['last_payout'] < blocks[block_nr].timestamp:
+                            if c.CALCULATION_SETTINGS['SHARE_FEES']:
+                                share = (balance/poolbalance) * (blocks[block_nr].reward +
+                                                                 blocks[block_nr].totalFee)
+                            else:
+                                share = (balance/poolbalance) * blocks[block_nr].reward
+                            voter_dict[i]['share'] += share
+                            chunk_dict.update({i: share})
+                    reuse = True
 
 
-            # parsing a transaction
-            minvote = '{{"votes":["-{0}"]}}'.format(delegate_pubkey)
-            plusvote = '{{"votes":["+{0}"]}}'.format(delegate_pubkey)
+                # parsing a transaction
+                minvote = '{{"votes":["-{0}"]}}'.format(delegate_pubkey)
+                plusvote = '{{"votes":["+{0}"]}}'.format(delegate_pubkey)
 
-            reuse = False
+                reuse = False
 
-            if tx.recipientId in voter_dict:
-                voter_dict[tx.recipientId]['balance'] += tx.amount
-            if tx.senderId in voter_dict:
-                voter_dict[tx.senderId]['balance'] -= (tx.amount + tx.fee)
-            if tx.senderId in voter_dict and tx.type == 3 and plusvote in tx.rawasset:
-                voter_dict[tx.senderId]['status'] = True
-            if tx.senderId in voter_dict and tx.type == 3 and minvote in tx.rawasset:
-                voter_dict[tx.senderId]['status'] = False
+                if tx.recipientId in voter_dict:
+                    voter_dict[tx.recipientId]['balance'] += tx.amount
+                if tx.senderId in voter_dict:
+                    voter_dict[tx.senderId]['balance'] -= (tx.amount + tx.fee)
+                if tx.senderId in voter_dict and tx.type == 3 and plusvote in tx.rawasset:
+                    voter_dict[tx.senderId]['status'] = True
+                if tx.senderId in voter_dict and tx.type == 3 and minvote in tx.rawasset:
+                    voter_dict[tx.senderId]['status'] = False
 
-        remaining_blocks = len(blocks) - block_nr - 1
-        for i in range(remaining_blocks):
-            for x in chunk_dict:
-                voter_dict[x]['share'] += chunk_dict[x]
+            remaining_blocks = len(blocks) - block_nr - 1
+            for i in range(remaining_blocks):
+                for x in chunk_dict:
+                    voter_dict[x]['share'] += chunk_dict[x]
+
+        # an IndexError occurs if max(transactions.timestamp) > max(blocks.timestamp) This means we parsed every block
+        except IndexError:
+            pass
+
         for i in voter_dict:
             logger.info("{0}  {1}  {2}  {3}  {4}".format(i,
                                                          voter_dict[i]['share'],
@@ -728,9 +734,11 @@ class Delegate:
 
         the only option it evaluates is SHARE_FEES
 
+        One caveat: the maximum interval of 6.8 minutes between a transaction and a forged block by the delegate can
+        provide errors. There always needs to be a forged block
+
         '''
         logger.info('starting share calculation using settings: {0} {1}'.format(c.DELEGATE, c.CALCULATION_SETTINGS))
-        cursor = DbCursor()
 
         if passphrase:
             delegate_keys = core.getKeys(secret=passphrase,
@@ -795,76 +803,80 @@ class Delegate:
         block_nr = start_block
         chunk_dict = {}
         reuse = False
-        for tx in transactions:
-            while tx.timestamp > blocks[block_nr].timestamp:
-                if reuse:
+        try:
+            for tx in transactions:
+                while tx.timestamp > blocks[block_nr].timestamp:
+                    if reuse:
+                        block_nr += 1
+                        for x in chunk_dict:
+                            voter_dict[x]['share'] += chunk_dict[x]
+                        continue
+
                     block_nr += 1
-                    for x in chunk_dict:
-                        voter_dict[x]['share'] += chunk_dict[x]
-                    continue
-                block_nr += 1
-                poolbalance = 0
-                chunk_dict = {}
-                for i in voter_dict:
-                    balance = voter_dict[i]['balance']
-
-                    #checks if a delegate that votes for us is has forged blocks in the mean time
-                    try:
-                        for x in voter_dict[i]['blocks_forged']:
-                            if x.timestamp < blocks[block_nr].timestamp:
-                                voter_dict[i]['balance'] += (x.reward + x.totalFee)
-                                voter_dict[i]['blocks_forged'].remove(x)
+                    poolbalance = 0
+                    chunk_dict = {}
+                    for i in voter_dict:
                         balance = voter_dict[i]['balance']
-                    except Exception:
-                        pass
 
-                    if voter_dict[i]['status']:
-                        if not voter_dict[i]['balance'] < 0:
-                            poolbalance += balance
-                        else:
-                            logger.fatal('balance lower than zero for: {0}'.format(i))
-                            raise NegativeBalanceError('balance lower than zero for: {0}'.format(i))
+                        #checks if a delegate that votes for us is has forged blocks in the mean time
+                        try:
+                            for x in voter_dict[i]['blocks_forged']:
+                                if x.timestamp < blocks[block_nr].timestamp:
+                                    voter_dict[i]['balance'] += (x.reward + x.totalFee)
+                                    voter_dict[i]['blocks_forged'].remove(x)
+                            balance = voter_dict[i]['balance']
+                        except Exception:
+                            pass
 
-                for i in voter_dict:
-                    balance = voter_dict[i]['balance']
+                        if voter_dict[i]['status']:
+                            if not voter_dict[i]['balance'] < 0:
+                                poolbalance += balance
+                            else:
+                                logger.fatal('balance lower than zero for: {0}'.format(i))
+                                raise NegativeBalanceError('balance lower than zero for: {0}'.format(i))
 
-                    if voter_dict[i]['status'] and voter_dict[i]['last_payout'] < blocks[block_nr].timestamp:
-                        if c.CALCULATION_SETTINGS['SHARE_FEES']:
-                            share = (balance / poolbalance) * (blocks[block_nr].reward +
-                                                               blocks[block_nr].totalFee)
-                        else:
-                            share = (balance / poolbalance) * blocks[block_nr].reward
-                        voter_dict[i]['share'] += share
-                        chunk_dict.update({i: share})
-                reuse = True
+                    for i in voter_dict:
+                        balance = voter_dict[i]['balance']
 
-            # parsing a transaction
-            minvote = '{{"votes":["-{0}"]}}'.format(delegate_pubkey)
-            plusvote = '{{"votes":["+{0}"]}}'.format(delegate_pubkey)
+                        if voter_dict[i]['status'] and voter_dict[i]['last_payout'] < blocks[block_nr].timestamp:
+                            if c.CALCULATION_SETTINGS['SHARE_FEES']:
+                                share = (balance / poolbalance) * (blocks[block_nr].reward +
+                                                                   blocks[block_nr].totalFee)
+                            else:
+                                share = (balance / poolbalance) * blocks[block_nr].reward
+                            voter_dict[i]['share'] += share
+                            chunk_dict.update({i: share})
+                    reuse = True
 
-            reuse = False
+                # parsing a transaction
+                minvote = '{{"votes":["-{0}"]}}'.format(delegate_pubkey)
+                plusvote = '{{"votes":["+{0}"]}}'.format(delegate_pubkey)
 
-            if tx.recipientId in voter_dict:
-                voter_dict[tx.recipientId]['balance'] += tx.amount
-            if tx.senderId in voter_dict:
-                voter_dict[tx.senderId]['balance'] -= (tx.amount + tx.fee)
-            if tx.senderId in voter_dict and tx.type == 3 and plusvote in tx.rawasset:
-                voter_dict[tx.senderId]['status'] = True
-            if tx.senderId in voter_dict and tx.type == 3 and minvote in tx.rawasset:
-                voter_dict[tx.senderId]['status'] = False
+                reuse = False
 
+                if tx.recipientId in voter_dict:
+                    voter_dict[tx.recipientId]['balance'] += tx.amount
+                if tx.senderId in voter_dict:
+                    voter_dict[tx.senderId]['balance'] -= (tx.amount + tx.fee)
+                if tx.senderId in voter_dict and tx.type == 3 and plusvote in tx.rawasset:
+                    voter_dict[tx.senderId]['status'] = True
+                if tx.senderId in voter_dict and tx.type == 3 and minvote in tx.rawasset:
+                    voter_dict[tx.senderId]['status'] = False
 
-        remaining_blocks = len(blocks) - block_nr - 1
-        for i in range(remaining_blocks):
-            for x in chunk_dict:
-                voter_dict[x]['share'] += chunk_dict[x]
+            remaining_blocks = len(blocks) - block_nr - 1
+            for i in range(remaining_blocks):
+                for x in chunk_dict:
+                    voter_dict[x]['share'] += chunk_dict[x]
+        except IndexError:
+            pass
 
         for i in voter_dict:
-            logger.info("{0}  {1}  {2}  {3}  {4}".format(i,
-                                                         voter_dict[i]['share'],
-                                                         voter_dict[i]['status'],
-                                                         voter_dict[i]['last_payout'],
-                                                         voter_dict[i]['vote_timestamp']))
+            logger.info("{0}  {1}  {2}  {3}  {4}".format(
+                i,
+                voter_dict[i]['share'],
+                voter_dict[i]['status'],
+                voter_dict[i]['last_payout'],
+                voter_dict[i]['vote_timestamp']))
         return voter_dict, max_timestamp
 
 
@@ -1021,6 +1033,3 @@ def get_transactionlist(delegate_pubkey):
 
         named_transactions.append(tx_id)
     return named_transactions
-
-def new():
-    print('helloworld')
