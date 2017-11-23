@@ -61,7 +61,8 @@ class TestAddress(TestCase):
 
         # this test depends on the state of Ark, in my testnode, only 2 payouts have occured
         # (it is not connected to the network and thus does not update
-        self.assertTrue(len(payouts) == 2)
+        # self.assertTrue(len(payouts) == 2)
+
         for i in payouts:
             self.assertIsInstance(i, tuple)
             self.assertIsInstance(i.id, str)
@@ -100,5 +101,5 @@ class TestAddress(TestCase):
             self.assertIsInstance(i.timestamp, int)
             self.assertIsInstance(i.amount, int)
 
-        self.assertEqual(balance, balance_over_time[len(balance_over_time) - 1].amount)
+        self.assertEqual(balance, balance_over_time[-1].amount)
 
