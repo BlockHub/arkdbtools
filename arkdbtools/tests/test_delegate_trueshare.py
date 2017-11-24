@@ -54,3 +54,22 @@ class TestDelegateTrueShare(TestCase):
             sum_payouts += payouts[i]['share']
 
         self.assertGreater(sum_payouts, sum_payouts_no_settings)
+
+    def test_true_share_setting_blacklist(self):
+        from arkdbtools.dbtools import Delegate, set_calculation
+
+        delegate = 'AZse3vk8s3QEX1bqijFb21aSBeoF6vqLYE'
+        delegate_pubkey = '0218b77efb312810c9a549e2cc658330fcc07f554d465673e08fa304fa59e67a0a'
+
+        payouts_no_setting, timestamp = Delegate.trueshare(del_pubkey=delegate_pubkey, del_address=delegate)
+
+        set_calculation(
+            blacklist=['AJwHyHAArNmzGfmDnsJenF857ATQevg8HY'],
+        )
+        payouts, timestamp = Delegate.trueshare(del_pubkey=delegate_pubkey, del_address=delegate)
+
+        self.assertIsInstance(payouts, dict)
+        self.assertIsInstance(payouts_no_setting, dict)
+
+        self.assertFalse(payouts == payouts_no_setting)
+        self.assertTrue(len(payouts) < len(payouts_no_setting))

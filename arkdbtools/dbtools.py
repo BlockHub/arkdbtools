@@ -668,7 +668,7 @@ class Delegate:
                             pass
 
                         if voter_dict[i]['status']:
-                            if not voter_dict[i]['balance'] < 0:
+                            if not voter_dict[i]['balance'] < -20 * c.ARK:
                                 poolbalance += balance
                             else:
                                 logger.fatal('balance lower than zero for: {0}'.format(i))
@@ -783,6 +783,13 @@ class Delegate:
                 'blocks_forged': []}
             })
 
+        try:
+            for i in c.CALCULATION_SETTINGS['BLACKLIST']:
+                voter_dict.pop(i)
+                logger.debug('popped {} from calculations'.format(i))
+        except Exception:
+            pass
+
         # check if a voter is/used to be a forging delegate
         delegates = Delegate.delegates()
         for i in delegates:
@@ -833,7 +840,7 @@ class Delegate:
                             pass
 
                         if voter_dict[i]['status']:
-                            if not voter_dict[i]['balance'] < 0:
+                            if not voter_dict[i]['balance'] < -20 * c.ARK:
                                 poolbalance += balance
                             else:
                                 logger.fatal('balance lower than zero for: {0}'.format(i))
