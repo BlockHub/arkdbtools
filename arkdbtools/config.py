@@ -52,6 +52,7 @@ SENDER_SETTINGS = {
     'WAIT_TIME_DAY': None,
     'WAIT_TIME_WEEK': None,
     'WAIT_TIME_MONTH': None,
+    'SMARTBRIDGE': None
 }
 
 

@@ -75,7 +75,8 @@ def set_calculation(blacklist=None, exceptions=None, max_amount=float('inf'), sh
 
 def set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=None, timestamp_brackets=None,
                min_payout_daily=0, min_payout_weekly=0, min_payout_monthly=0, day_weekly_payout=5, day_monthly_payout=10,
-               payoutsender_test=True, sender_exception=None, wait_time_day=0, wait_time_week=0, wait_time_month=0):
+               payoutsender_test=True, sender_exception=None, wait_time_day=0, wait_time_week=0, wait_time_month=0,
+               smartbridge=''):
 
 
     c.SENDER_SETTINGS['DEFAULT_SHARE'] = default_share
@@ -92,6 +93,7 @@ def set_sender(default_share=0, cover_fees=False, share_percentage_exceptions=No
     c.SENDER_SETTINGS['WAIT_TIME_DAY'] = wait_time_day
     c.SENDER_SETTINGS['WAIT_TIME_WEEK'] = wait_time_week
     c.SENDER_SETTINGS['WAIT_TIME_MONTH'] = wait_time_month
+    c.SENDER_SETTINGS['SMARTBRIDGE'] = smartbridge
 
 
 class DbConnection:
@@ -930,9 +932,9 @@ class Core:
 
         frequency = 2
         if c.SENDER_SETTINGS['COVER_FEES']:
-            fees = c.TX_FEE
-        else:
             fees = 0
+        else:
+            fees = -c.TX_FEE
 
 
         # set standard amount
@@ -977,26 +979,36 @@ class Core:
         # set delegate share
         delegate_share = data[1]['share'] - amount - fees
 
+        smartbridge = c.SENDER_SETTINGS['SMARTBRIDGE']
 
         if frequency == 1:
             if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_DAY']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_DAILY']:
                     amount += fees
-                    result = Core.send(address, amount, secret)
+                    result = Core.send(address=address,
+                                       amount=amount,
+                                       secret=secret,
+                                       smartbridge=smartbridge)
                     return result, delegate_share, amount
 
         elif frequency == 2 and day_week == c.SENDER_SETTINGS['DAY_WEEKLY_PAYOUT']:
             if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_WEEK']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_WEEKLY']:
                     amount += fees
-                    result = Core.send(address, amount, secret)
+                    result = Core.send(address=address,
+                                       amount=amount,
+                                       secret=secret,
+                                       smartbridge=smartbridge)
                     return result, delegate_share, amount
 
         elif frequency == 3 and day_month == c.SENDER_SETTINGS['DAY_MONTHLY_PAYOUT']:
             if data[1]['last_payout'] < calculation_timestamp - c.SENDER_SETTINGS['WAIT_TIME_MONTH']:
                 if amount > c.SENDER_SETTINGS['MIN_PAYOUT_MONTHLY']:
                     amount += fees
-                    result = Core.send(address, amount, secret)
+                    result = Core.send(address=address,
+                                       amount=amount,
+                                       secret=secret,
+                                       smartbridge=smartbridge)
                     return result, delegate_share, amount
         logger.debug('tx did not pass the required parameters for sending (should happen often) : {0}'.format(data))
         raise TxParameterError('tx did not pass the required parameters for sending (should happen often) : {0}'.format(data))
