@@ -203,7 +203,7 @@ class Address:
         """returns all received transactions between the address and registered delegate accounts
         ORDER by timestamp ASC."""
         qry = DbCursor().execute_and_fetchall("""
-                SELECT transactions."id", transactions."amount",
+                SELECT DISTINCT transactions."id", transactions."amount",
                        transactions."timestamp", transactions."recipientId",
                        transactions."senderId", transactions."rawasset",
                        transactions."type", transactions."fee"
