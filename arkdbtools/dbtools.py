@@ -896,7 +896,7 @@ class Delegate:
 class Core:
 
     @staticmethod
-    def send(address, amount, smartbridge=None, network='ark', secret=None):
+    def send(address, amount, smartbridge=None, network='ark', secret=None, latency=1):
         if c.SENDER_SETTINGS['PAYOUTSENDER_TEST']:
             logger.debug('Transaction test send to {0} for amount: {1} with smartbridge: {2}'.format(address, amount, smartbridge))
             return
@@ -905,9 +905,9 @@ class Core:
                               vendorField=smartbridge)
         tx.sign(secret)
         tx.serialize()
+        api.use(network, latency=latency)
         for i in range(5):
             try:
-                api.use(network)
                 result = api.broadcast(tx)
                 logger.debug(result)
                 if result['success']:
