@@ -6,7 +6,7 @@ from collections import namedtuple
 import binascii
 import datetime
 import logging
-
+import requests.exceptions as rq
 
 if c.LOGGING['USE']:
     logger = logging.getLogger(__name__)
@@ -899,21 +899,24 @@ class Core:
     def send(address, amount, smartbridge=None, network='ark', secret=None):
         if c.SENDER_SETTINGS['PAYOUTSENDER_TEST']:
             logger.debug('Transaction test send to {0} for amount: {1} with smartbridge: {2}'.format(address, amount, smartbridge))
-            return True
-        api.use(network)
+            return
         tx = core.Transaction(amount=amount,
                               recipientId=address,
                               vendorField=smartbridge)
         tx.sign(secret)
         tx.serialize()
+        for i in range(5):
+            try:
+                api.use(network)
+                result = api.broadcast(tx)
+                logger.debug(result)
+                if result['success']:
+                    logger.debug(result)
+                    return result
+            except rq.ReadTimeout:
+                pass
 
-        result = api.broadcast(tx)
-        logger.debug(result)
-        if result['success']:
-            logger.debug(result)
-            return result
-
-        logger.fatal('failed to send transaction 5 times, response: {}'.format(result))
+        logger.warning('failed to send transaction 5 times, response: {}'.format(result))
         raise ApiError('failed to send transaction 5 times, response: {}'.format(result))
 
     @staticmethod
